@@ -121,19 +121,23 @@ public final class DwpExporter {
             throw new IllegalArgumentException("Áudio inválido para calcular o loop.");
         }
 
-        int minimumLoop = Math.max(sampleRate / 20, Math.min(length / 4, 256));
+        int margin = Math.max(4, Math.min(32, length / 20));
+        int preferredMinimum = Math.max(128, sampleRate / 20);
+        int minimumLoop = Math.min(preferredMinimum, Math.max(64, length / 2));
+        int maximumStart = Math.max(margin, length - minimumLoop - margin);
         int startTarget = clamp((int) Math.round(length * startPercent / 100.0),
-                32, Math.max(32, length - minimumLoop - 32));
+                margin, maximumStart);
+        int maximumEnd = Math.max(startTarget + minimumLoop, length - margin);
         int endTarget = clamp((int) Math.round(length * endPercent / 100.0),
-                startTarget + minimumLoop, length - 16);
+                startTarget + minimumLoop, maximumEnd);
 
         int zeroRadius = Math.max(8, sampleRate / 100);
         int absoluteStart = nearestUpwardZeroCrossing(samples, offset + startTarget,
-                offset + 16, offset + length - minimumLoop, zeroRadius);
+                offset + margin, offset + length - minimumLoop, zeroRadius);
         int loopStart = absoluteStart - offset;
 
         int minEnd = loopStart + minimumLoop;
-        int maxEnd = length - 8;
+        int maxEnd = Math.max(minEnd, length - margin);
         endTarget = clamp(endTarget, minEnd, maxEnd);
         int phaseRadius = Math.max(16, sampleRate / 40);
         int compareWindow = Math.max(16, Math.min(sampleRate / 250, minimumLoop / 5));
@@ -141,7 +145,7 @@ public final class DwpExporter {
                 minEnd, maxEnd, phaseRadius, compareWindow);
 
         if (loopEnd <= loopStart) {
-            loopEnd = Math.min(length - 8, loopStart + minimumLoop);
+            loopEnd = Math.min(length, loopStart + minimumLoop);
         }
         return new int[]{loopStart, loopEnd};
     }
