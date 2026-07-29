@@ -51,12 +51,10 @@ public final class ChromaticGenerator {
     }
 
     private static final class SourceSample {
-        final float[] audio;
-        final double fundamental;
+        final PitchShifter.Analysis analysis;
 
-        SourceSample(float[] audio, double fundamental) {
-            this.audio = audio;
-            this.fundamental = fundamental;
+        SourceSample(PitchShifter.Analysis analysis) {
+            this.analysis = analysis;
         }
     }
 
@@ -93,7 +91,8 @@ public final class ChromaticGenerator {
         SourceSample[] sources = new SourceSample[sampleCount];
         for (int i = 0; i < sampleCount; i++) {
             int percent = (int) Math.round((i / (double) sampleCount) * 25.0);
-            progress(listener, percent, "Analisando pitch do sample " + (i + 1) + " de " + sampleCount + "…");
+            progress(listener, percent, "Analisando pitch e pulsos do sample " + (i + 1)
+                    + " de " + sampleCount + "…");
             DocumentFile file = files.get((i + 1) + ".wav");
             WavIO.WavData wav = WavIO.read(resolver, file.getUri());
             float[] resampled = WavIO.resampleLinear(wav.samples, wav.sampleRate, OUTPUT_SAMPLE_RATE);
@@ -103,7 +102,9 @@ public final class ChromaticGenerator {
                 throw new IOException("Não consegui detectar o pitch de " + (i + 1)
                         + ".wav. Use um sample vocal limpo, sem silêncio longo ou instrumental.");
             }
-            sources[i] = new SourceSample(trimmed, fundamental);
+            PitchShifter.Analysis analysis = PitchShifter.analyze(
+                    trimmed, fundamental, OUTPUT_SAMPLE_RATE);
+            sources[i] = new SourceSample(analysis);
         }
 
         int noteLength = msToSamples(config.noteDurationMs);
@@ -129,7 +130,8 @@ public final class ChromaticGenerator {
         int cursor = 0;
         for (int note = 0; note < config.noteCount; note++) {
             int percent = 25 + (int) Math.round((note / (double) config.noteCount) * 68.0);
-            progress(listener, percent, "Gerando nota " + (note + 1) + " de " + config.noteCount + "…");
+            progress(listener, percent, "Ressintetizando nota " + (note + 1)
+                    + " de " + config.noteCount + "…");
 
             SourceSample source = sources[note % sampleCount];
             int absoluteSemitone = config.startNote + note;
@@ -138,8 +140,7 @@ public final class ChromaticGenerator {
             int midi = 12 * (octave + 1) + noteInOctave;
             double targetFrequency = 440.0 * Math.pow(2.0, (midi - 69) / 12.0);
 
-            float[] pitched = PitchShifter.shift(source.audio, source.fundamental,
-                    targetFrequency, OUTPUT_SAMPLE_RATE, noteLength);
+            float[] pitched = PitchShifter.shift(source.analysis, targetFrequency, noteLength);
             applyFade(pitched, msToSamples(config.fadeMs));
             if (config.normalize) normalize(pitched, 0.94f);
 
