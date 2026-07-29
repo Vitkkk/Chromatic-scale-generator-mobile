@@ -11,11 +11,25 @@ Port Android do **Chromatic Scale Generator** para criação de chromatics de FN
 5. Toque em **Gerar chromatic.wav**.
 6. Depois da geração, ouça o resultado ou toque em **Criar DirectWave (.dwp)**.
 
-O aplicativo detecta o pitch fundamental de cada sample, afina cada nota para a frequência musical desejada, preserva os formantes da voz para evitar o efeito “Alvin”, mantém uma duração configurável e gera um WAV mono PCM 16-bit em 48 kHz. Opcionalmente, também cria a pasta `pitched_samples` com cada nota separada.
+O aplicativo detecta o pitch fundamental de cada sample, afina cada nota para a frequência musical desejada, preserva os formantes da voz, mantém uma duração configurável e gera um WAV mono PCM 16-bit em 48 kHz. Opcionalmente, também cria a pasta `pitched_samples` com cada nota separada.
+
+## Ressíntese vocal da versão 0.5
+
+A versão de PC fornecida usa Praat/Parselmouth com o fluxo `To Manipulation → Replace pitch tier → Get resynthesis (overlap-add)`. A versão 0.5 aproxima esse comportamento com um novo motor Java offline:
+
+- análise de pitch local ao longo do sample, em vez de uma frequência única para o arquivo inteiro;
+- separação de trechos voiced e unvoiced;
+- localização dos pulsos glóticos por correlação cruzada, seguindo o princípio usado pelo Praat;
+- overlap-add com janelas limitadas pelos períodos locais da fonte e da nota de destino;
+- consoantes e regiões não periódicas preservadas pela trilha original;
+- shifts grandes feitos diretamente a partir do sample original, sem várias etapas que acumulam artefatos;
+- análise pesada realizada uma vez por sample e reutilizada em todas as notas da chromatic.
+
+Isso reduz o som granulado, metálico ou “estragado” que aparecia no TD-PSOLA simplificado anterior.
 
 ## DirectWave monolítico
 
-A versão 0.4 transforma o WAV recém-gerado em um instrumento `.dwp` para DirectWave no FL Studio Mobile e no FL Studio para PC.
+O aplicativo transforma o WAV recém-gerado em um instrumento `.dwp` para DirectWave no FL Studio Mobile e no FL Studio para PC.
 
 - **Chromatic inteira:** cria uma zona para cada nota gerada.
 - **Trecho personalizado:** escolha a primeira e a última nota pelo índice dentro da chromatic, começando em 1.
@@ -36,11 +50,11 @@ A opção **Ativar loop sustentado no DWP** grava pontos de loop em cada zona.
 - Os valores padrão são 35% e 90%.
 - O início é aproximado para um cruzamento ascendente por zero.
 - O fim é procurado ao redor do valor escolhido para encontrar uma fase parecida com a região inicial, reduzindo estalos na repetição.
-- O loop pode ser desligado para manter o comportamento seco da versão anterior.
+- O loop pode ser desligado para manter o comportamento seco.
 
 O loop funciona melhor quando o trecho escolhido tem volume e timbre relativamente estáveis. Samples com fala muito curta, consoantes fortes ou grande mudança de timbre podem precisar de ajustes nos percentuais.
 
-## Recursos da versão 0.4
+## Recursos da versão 0.5
 
 - Seleção de pasta pelo Storage Access Framework do Android, sem permissão ampla de armazenamento.
 - Detecção automática de `1.wav`, `2.wav`, `3.wav`…
@@ -48,8 +62,9 @@ O loop funciona melhor quando o trecho escolhido tem volume e timbre relativamen
 - Nota inicial de C a B e oitavas 1 a 6.
 - Quantidade de notas configurável.
 - Duração fixa por nota e gap em milissegundos.
-- Correção automática de formantes semelhante ao **F-Mode** para manter a voz natural.
-- Processamento TD-PSOLA em estágios para mudanças maiores que uma oitava.
+- Ressíntese pitch-synchronous inspirada no pipeline Manipulation/overlap-add do Praat.
+- Contorno de pitch local e pulsos por correlação cruzada.
+- Preservação de formantes sem processamento em múltiplas etapas.
 - Fade curto para evitar cliques.
 - Normalização opcional.
 - Exportação da chromatic e dos samples afinados.
@@ -82,13 +97,12 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ## Implementação de áudio
 
-O port substitui Praat/Parselmouth por um motor Java offline que inclui:
-
 - Leitura de WAV PCM 8/16/24/32-bit e IEEE float 32-bit.
 - Conversão para mono e 48 kHz.
-- Detecção de frequência fundamental baseada em YIN.
-- Pitch shifting vocal por TD-PSOLA com preservação de formantes.
-- Fallback SOLA para ataques, consoantes e regiões sem periodicidade suficiente.
+- Detecção inicial da frequência fundamental baseada em YIN.
+- Rastreamento local de pitch e decisão voiced/unvoiced.
+- Pulsos pitch-synchronous encontrados por correlação cruzada.
+- Ressíntese overlap-add direta a partir da forma de onda original.
 - Fade, normalização, concatenação e codificação WAV PCM 16-bit.
 - Escrita do formato DirectWave `DwPr` com zonas MIDI, pontos de loop e samples PCM embutidos.
 
