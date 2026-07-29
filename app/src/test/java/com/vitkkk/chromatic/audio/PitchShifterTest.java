@@ -12,15 +12,17 @@ public class PitchShifterTest {
     @Test
     public void reachesTargetPitchAndKeepsRequestedLength() {
         float[] source = harmonicVoice(SOURCE_FREQUENCY, 0.6);
+        PitchShifter.Analysis analysis = PitchShifter.analyze(
+                source, SOURCE_FREQUENCY, SAMPLE_RATE);
         double[] factors = {0.5, 0.75, 1.5, 2.0, 4.0};
 
         for (double factor : factors) {
             double target = SOURCE_FREQUENCY * factor;
-            float[] shifted = PitchShifter.shift(source, SOURCE_FREQUENCY, target,
-                    SAMPLE_RATE, source.length);
+            float[] shifted = PitchShifter.shift(analysis, target, source.length);
 
             assertEquals(source.length, shifted.length);
-            double measured = measurePitchNear(shifted, target);
+            double measured = measurePitchNear(shifted, target,
+                    shifted.length / 4, shifted.length * 3 / 4);
             assertTrue("Pitch não detectado para fator " + factor, Double.isFinite(measured));
             assertEquals("Pitch incorreto para fator " + factor,
                     target, measured, Math.max(1.5, target * 0.018));
@@ -36,15 +38,49 @@ public class PitchShifterTest {
                 SAMPLE_RATE, requestedLength);
 
         assertEquals(requestedLength, shifted.length);
-        for (float sample : shifted) {
+        assertFiniteAudio(shifted);
+    }
+
+    @Test
+    public void turnsMovingSourcePitchIntoStableTarget() {
+        float[] source = chirpedVoice(105.0, 145.0, 0.7);
+        PitchShifter.Analysis analysis = PitchShifter.analyze(source, 125.0, SAMPLE_RATE);
+        float[] shifted = PitchShifter.shift(analysis, 220.0, source.length);
+
+        assertFiniteAudio(shifted);
+        double firstHalf = measurePitchNear(shifted, 220.0,
+                shifted.length / 5, shifted.length / 2);
+        double secondHalf = measurePitchNear(shifted, 220.0,
+                shifted.length / 2, shifted.length * 4 / 5);
+        assertEquals(220.0, firstHalf, 4.0);
+        assertEquals(220.0, secondHalf, 4.0);
+        assertEquals(firstHalf, secondHalf, 3.0);
+    }
+
+    @Test
+    public void handlesMinimumFortyMillisecondSample() {
+        float[] source = harmonicVoice(SOURCE_FREQUENCY, 0.04);
+        PitchShifter.Analysis analysis = PitchShifter.analyze(
+                source, SOURCE_FREQUENCY, SAMPLE_RATE);
+        float[] shifted = PitchShifter.shift(analysis, 180.0, source.length);
+
+        assertEquals(source.length, shifted.length);
+        assertFiniteAudio(shifted);
+        assertEquals(180.0, measurePitchNear(shifted, 180.0,
+                0, shifted.length), 5.0);
+    }
+
+    private static void assertFiniteAudio(float[] audio) {
+        for (float sample : audio) {
             assertTrue(Float.isFinite(sample));
             assertTrue(Math.abs(sample) <= 2.0f);
         }
     }
 
-    private static double measurePitchNear(float[] audio, double expectedFrequency) {
-        int start = audio.length / 4;
-        int end = audio.length * 3 / 4;
+    private static double measurePitchNear(float[] audio, double expectedFrequency,
+                                           int start, int end) {
+        start = Math.max(0, start);
+        end = Math.min(audio.length, end);
         int minLag = Math.max(2, (int) Math.floor(SAMPLE_RATE / (expectedFrequency * 1.30)));
         int maxLag = Math.min(end - start - 1,
                 (int) Math.ceil(SAMPLE_RATE / (expectedFrequency * 0.70)));
@@ -83,6 +119,26 @@ public class PitchShifterTest {
                     0.68 * Math.sin(phase)
                             + 0.22 * Math.sin(2.0 * phase)
                             + 0.10 * Math.sin(3.0 * phase)));
+        }
+        return audio;
+    }
+
+    private static float[] chirpedVoice(double startFrequency, double endFrequency,
+                                         double seconds) {
+        int length = (int) Math.round(seconds * SAMPLE_RATE);
+        float[] audio = new float[length];
+        double phase = 0.0;
+        for (int i = 0; i < length; i++) {
+            double position = i / (double) Math.max(1, length - 1);
+            double frequency = startFrequency + (endFrequency - startFrequency) * position;
+            phase += 2.0 * Math.PI * frequency / SAMPLE_RATE;
+            double attack = Math.min(1.0, i / (0.015 * SAMPLE_RATE));
+            double release = Math.min(1.0, (length - 1 - i) / (0.020 * SAMPLE_RATE));
+            double envelope = Math.max(0.0, attack * release);
+            audio[i] = (float) (envelope * (
+                    0.66 * Math.sin(phase)
+                            + 0.23 * Math.sin(2.0 * phase)
+                            + 0.11 * Math.sin(3.0 * phase)));
         }
         return audio;
     }
