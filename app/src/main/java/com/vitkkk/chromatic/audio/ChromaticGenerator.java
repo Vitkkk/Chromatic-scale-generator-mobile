@@ -137,9 +137,9 @@ public final class ChromaticGenerator {
             int noteInOctave = Math.floorMod(absoluteSemitone, 12);
             int midi = 12 * (octave + 1) + noteInOctave;
             double targetFrequency = 440.0 * Math.pow(2.0, (midi - 69) / 12.0);
-            double factor = targetFrequency / source.fundamental;
 
-            float[] pitched = PitchShifter.shift(source.audio, factor, noteLength);
+            float[] pitched = PitchShifter.shift(source.audio, source.fundamental,
+                    targetFrequency, OUTPUT_SAMPLE_RATE, noteLength);
             applyFade(pitched, msToSamples(config.fadeMs));
             if (config.normalize) normalize(pitched, 0.94f);
 
