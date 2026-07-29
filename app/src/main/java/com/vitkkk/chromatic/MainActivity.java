@@ -49,11 +49,14 @@ public class MainActivity extends AppCompatActivity {
     private EditText dwpRangeStartInput;
     private EditText dwpRangeEndInput;
     private EditText dwpFileNameInput;
+    private EditText dwpLoopStartInput;
+    private EditText dwpLoopEndInput;
     private Spinner startNoteSpinner;
     private Spinner startOctaveSpinner;
     private MaterialSwitch normalizeSwitch;
     private MaterialSwitch dumpSamplesSwitch;
     private MaterialSwitch dwpEntireSwitch;
+    private MaterialSwitch dwpLoopSwitch;
     private ProgressBar progressBar;
 
     private Uri folderUri;
@@ -77,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
         previewButton.setOnClickListener(view -> togglePreview());
         dwpButton.setOnClickListener(view -> startDwpExport());
         dwpEntireSwitch.setOnCheckedChangeListener((button, checked) -> updateDwpControls());
+        dwpLoopSwitch.setOnCheckedChangeListener((button, checked) -> updateDwpControls());
 
         String savedUri = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_FOLDER_URI, null);
         if (!TextUtils.isEmpty(savedUri)) {
@@ -104,11 +108,14 @@ public class MainActivity extends AppCompatActivity {
         dwpRangeStartInput = findViewById(R.id.dwpRangeStartInput);
         dwpRangeEndInput = findViewById(R.id.dwpRangeEndInput);
         dwpFileNameInput = findViewById(R.id.dwpFileNameInput);
+        dwpLoopStartInput = findViewById(R.id.dwpLoopStartInput);
+        dwpLoopEndInput = findViewById(R.id.dwpLoopEndInput);
         startNoteSpinner = findViewById(R.id.startNoteSpinner);
         startOctaveSpinner = findViewById(R.id.startOctaveSpinner);
         normalizeSwitch = findViewById(R.id.normalizeSwitch);
         dumpSamplesSwitch = findViewById(R.id.dumpSamplesSwitch);
         dwpEntireSwitch = findViewById(R.id.dwpEntireSwitch);
+        dwpLoopSwitch = findViewById(R.id.dwpLoopSwitch);
         progressBar = findViewById(R.id.progressBar);
     }
 
@@ -153,7 +160,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         DocumentFile folder = DocumentFile.fromTreeUri(this, folderUri);
-        String name = folder != null && folder.getName() != null ? folder.getName() : folderUri.toString();
+        String name = folder != null && folder.getName() != null
+                ? folder.getName() : folderUri.toString();
         folderText.setText("Pasta: " + name);
     }
 
@@ -166,7 +174,8 @@ public class MainActivity extends AppCompatActivity {
                 int count = folder == null ? 0 : ChromaticGenerator.countNumberedSamples(folder);
                 runOnUiThread(() -> detectedSamplesText.setText("Samples detectados: " + count));
             } catch (Exception error) {
-                runOnUiThread(() -> detectedSamplesText.setText("Não foi possível ler a pasta."));
+                runOnUiThread(() ->
+                        detectedSamplesText.setText("Não foi possível ler a pasta."));
             }
         });
     }
@@ -206,7 +215,8 @@ public class MainActivity extends AppCompatActivity {
                     statusText.setText(String.format(Locale.getDefault(),
                             "Pronto: %d notas, %d samples, %.2f s. Agora você pode ouvir ou criar o DWP.",
                             result.noteCount, result.sampleCount, result.durationSeconds));
-                    Toast.makeText(this, "Chromatic gerada com sucesso!", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Chromatic gerada com sucesso!",
+                            Toast.LENGTH_LONG).show();
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
@@ -223,6 +233,14 @@ public class MainActivity extends AppCompatActivity {
         dwpRangeStartInput.setText("1");
         dwpRangeEndInput.setText(String.valueOf(config.noteCount));
         dwpFileNameInput.setText(toDwpFileName(config.outputFileName));
+        if (dwpLoopStartInput.getText() == null
+                || dwpLoopStartInput.getText().toString().trim().isEmpty()) {
+            dwpLoopStartInput.setText("35");
+        }
+        if (dwpLoopEndInput.getText() == null
+                || dwpLoopEndInput.getText().toString().trim().isEmpty()) {
+            dwpLoopEndInput.setText("90");
+        }
         updateDwpControls();
     }
 
@@ -234,6 +252,9 @@ public class MainActivity extends AppCompatActivity {
 
         final int firstNote;
         final int lastNote;
+        final boolean loopEnabled = dwpLoopSwitch.isChecked();
+        final int loopStartPercent;
+        final int loopEndPercent;
         try {
             if (dwpEntireSwitch.isChecked()) {
                 firstNote = 1;
@@ -241,6 +262,13 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 firstNote = parseInteger(dwpRangeStartInput, "Primeira nota do DWP");
                 lastNote = parseInteger(dwpRangeEndInput, "Última nota do DWP");
+            }
+            if (loopEnabled) {
+                loopStartPercent = parseInteger(dwpLoopStartInput, "Início do loop");
+                loopEndPercent = parseInteger(dwpLoopEndInput, "Fim do loop");
+            } else {
+                loopStartPercent = 35;
+                loopEndPercent = 90;
             }
         } catch (IllegalArgumentException error) {
             showError(error.getMessage());
@@ -263,16 +291,21 @@ public class MainActivity extends AppCompatActivity {
                         startMidi, generatedConfig.noteCount,
                         generatedConfig.noteDurationMs, generatedConfig.gapMs,
                         firstNote, lastNote,
+                        loopEnabled, loopStartPercent, loopEndPercent,
                         (percent, message) -> runOnUiThread(() -> {
                             progressBar.setProgress(percent);
                             statusText.setText(message);
                         }));
                 runOnUiThread(() -> {
                     setBusy(false);
+                    String loopText = result.loopEnabled
+                            ? " Loop contínuo embutido."
+                            : "";
                     statusText.setText(String.format(Locale.getDefault(),
-                            "DWP salvo: %d notas, MIDI %d–%d. Samples embutidos no próprio arquivo.",
-                            result.zoneCount, result.firstMidi, result.lastMidi));
-                    Toast.makeText(this, "DirectWave .dwp criado com sucesso!", Toast.LENGTH_LONG).show();
+                            "DWP salvo: %d zonas, MIDI %d–%d. A primeira e a última cobrem o teclado inteiro.%s",
+                            result.zoneCount, result.firstMidi, result.lastMidi, loopText));
+                    Toast.makeText(this, "DirectWave .dwp criado com sucesso!",
+                            Toast.LENGTH_LONG).show();
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
@@ -303,7 +336,9 @@ public class MainActivity extends AppCompatActivity {
 
     private int parseInteger(EditText input, String label) {
         String value = input.getText() == null ? "" : input.getText().toString().trim();
-        if (value.isEmpty()) throw new IllegalArgumentException(label + " não pode ficar vazio.");
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException(label + " não pode ficar vazio.");
+        }
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException error) {
@@ -366,11 +401,18 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateDwpControls() {
         boolean hasResult = generatedUri != null && generatedConfig != null;
-        dwpEntireSwitch.setEnabled(!busy && hasResult);
-        dwpFileNameInput.setEnabled(!busy && hasResult);
-        boolean customRange = !busy && hasResult && !dwpEntireSwitch.isChecked();
+        boolean available = !busy && hasResult;
+        dwpEntireSwitch.setEnabled(available);
+        dwpFileNameInput.setEnabled(available);
+        dwpLoopSwitch.setEnabled(available);
+
+        boolean customRange = available && !dwpEntireSwitch.isChecked();
         dwpRangeStartInput.setEnabled(customRange);
         dwpRangeEndInput.setEnabled(customRange);
+
+        boolean customLoop = available && dwpLoopSwitch.isChecked();
+        dwpLoopStartInput.setEnabled(customLoop);
+        dwpLoopEndInput.setEnabled(customLoop);
     }
 
     private String toDwpFileName(String wavName) {
