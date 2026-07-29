@@ -53,6 +53,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:hint="Quantidade de samples a usar (0 = automático)">
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/sampleCountInput"
                 android:layout_width="match_parent"
@@ -72,11 +73,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
+
             <Spinner
                 android:id="@+id/startNoteSpinner"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
                 android:layout_weight="1" />
+
             <Spinner
                 android:id="@+id/startOctaveSpinner"
                 android:layout_width="0dp"
@@ -89,6 +92,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:hint="Quantidade de notas da chromatic">
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/noteCountInput"
                 android:layout_width="match_parent"
@@ -102,6 +106,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:hint="Duração de cada nota (ms)">
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/noteDurationInput"
                 android:layout_width="match_parent"
@@ -115,6 +120,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:hint="Gap entre notas (ms)">
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/gapInput"
                 android:layout_width="match_parent"
@@ -128,6 +134,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:hint="Fade de entrada/saída (ms)">
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/fadeInput"
                 android:layout_width="match_parent"
@@ -141,6 +148,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:hint="Nome do arquivo final">
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/fileNameInput"
                 android:layout_width="match_parent"
@@ -210,7 +218,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Crie um instrumento monolítico para FL Studio Mobile e PC. Cada nota vira uma zona com o áudio embutido no próprio arquivo."
+            android:text="Crie um instrumento monolítico para FL Studio Mobile e PC. A primeira e a última zona também cobrem as notas fora do range, com pitch normal de sampler."
             android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
 
         <com.google.android.material.materialswitch.MaterialSwitch
@@ -232,6 +240,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:hint="Primeira nota">
+
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/dwpRangeStartInput"
                     android:layout_width="match_parent"
@@ -250,6 +259,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:hint="Última nota">
+
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/dwpRangeEndInput"
                     android:layout_width="match_parent"
@@ -260,11 +270,68 @@
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/dwpLoopSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:checked="false"
+            android:enabled="false"
+            android:text="Ativar loop sustentado no DWP" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Os pontos são alinhados automaticamente à fase da voz para reduzir estalos."
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Início do loop (%)">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/dwpLoopStartInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:enabled="false"
+                    android:inputType="number"
+                    android:text="35" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <Space
+                android:layout_width="10dp"
+                android:layout_height="1dp" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Fim do loop (%)">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/dwpLoopEndInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:enabled="false"
+                    android:inputType="number"
+                    android:text="90" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:hint="Nome do arquivo DirectWave">
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/dwpFileNameInput"
                 android:layout_width="match_parent"
