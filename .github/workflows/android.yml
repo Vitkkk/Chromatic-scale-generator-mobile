@@ -28,6 +28,9 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
+      - name: Test audio engine
+        run: gradle --no-daemon testDebugUnitTest
+
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
 
