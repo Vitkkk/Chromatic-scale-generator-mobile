@@ -12,16 +12,18 @@ import java.util.List;
 
 public class DwpWriterTest {
     @Test
-    public void writesMonolithicZonesWithExactMidiMapping() throws Exception {
+    public void writesMonolithicZonesWithExtendedEdgeMappingAndLoops() throws Exception {
         float[] note = new float[16800];
         for (int i = 0; i < note.length; i++) {
             note[i] = (float) (0.45 * Math.sin(2.0 * Math.PI * 220.0 * i / 48000.0));
         }
 
         List<DwpWriter.Zone> zones = new ArrayList<>();
-        zones.add(new DwpWriter.Zone(60, "C5", note));
+        zones.add(new DwpWriter.Zone(60, "C5", note, 0, note.length,
+                true, 5000, 14000));
         zones.add(new DwpWriter.Zone(61, "C#5", note));
-        zones.add(new DwpWriter.Zone(62, "D5", note));
+        zones.add(new DwpWriter.Zone(62, "D5", note, 0, note.length,
+                true, 5200, 14200));
 
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         DwpWriter.write(output, "Test Chromatic", zones, 48000, null);
@@ -53,8 +55,10 @@ public class DwpWriterTest {
             List<Chunk> fields = children(bytes, zoneChunks.get(index));
             Chunk zoneParams = find(fields, 500);
             assertEquals(midi, bytes[zoneParams.dataOffset] & 0xff);
-            assertEquals(midi, bytes[zoneParams.dataOffset + 1] & 0xff);
-            assertEquals(midi, bytes[zoneParams.dataOffset + 2] & 0xff);
+            assertEquals(index == 0 ? 0 : midi,
+                    bytes[zoneParams.dataOffset + 1] & 0xff);
+            assertEquals(index == zoneChunks.size() - 1 ? 127 : midi,
+                    bytes[zoneParams.dataOffset + 2] & 0xff);
 
             Chunk sampleInfo = find(fields, 503);
             assertEquals(note.length, int32(bytes, sampleInfo.dataOffset));
@@ -62,6 +66,22 @@ public class DwpWriterTest {
             assertEquals(4, int32(bytes, sampleInfo.dataOffset + 12));
             assertEquals(48000.0f, float32(bytes, sampleInfo.dataOffset + 16), 0.01f);
             assertEquals(16, int32(bytes, sampleInfo.dataOffset + 36));
+
+            if (index == 1) {
+                assertEquals(0, int32(bytes, sampleInfo.dataOffset + 4));
+                assertEquals(0, int32(bytes, sampleInfo.dataOffset + 20));
+                assertEquals(0, int32(bytes, sampleInfo.dataOffset + 24));
+                assertEquals(0, int32(bytes, sampleInfo.dataOffset + 28));
+                assertEquals(0, int32(bytes, sampleInfo.dataOffset + 32));
+            } else {
+                assertEquals(1, int32(bytes, sampleInfo.dataOffset + 4));
+                assertEquals(0, int32(bytes, sampleInfo.dataOffset + 20));
+                assertEquals(note.length, int32(bytes, sampleInfo.dataOffset + 24));
+                assertEquals(index == 0 ? 5000 : 5200,
+                        int32(bytes, sampleInfo.dataOffset + 28));
+                assertEquals(index == 0 ? 14000 : 14200,
+                        int32(bytes, sampleInfo.dataOffset + 32));
+            }
 
             Chunk pcm = find(fields, 517);
             assertEquals((note.length + 512L) * 2L, pcm.length);
@@ -81,6 +101,28 @@ public class DwpWriterTest {
         }
 
         assertEquals(2, programChunks.get(programChunks.size() - 1).tag);
+    }
+
+    @Test
+    public void singleZoneCoversEntireKeyboard() throws Exception {
+        float[] note = new float[4000];
+        List<DwpWriter.Zone> zones = new ArrayList<>();
+        zones.add(new DwpWriter.Zone(69, "A5", note));
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        DwpWriter.write(output, "Single", zones, 48000, null);
+        byte[] bytes = output.toByteArray();
+
+        Chunk global = chunk(bytes, 8);
+        Chunk program = chunk(bytes, global.end());
+        List<Chunk> programChunks = children(bytes, program);
+        Chunk onlyZone = null;
+        for (Chunk candidate : programChunks) if (candidate.tag == 3) onlyZone = candidate;
+        assertTrue(onlyZone != null);
+        Chunk params = find(children(bytes, onlyZone), 500);
+        assertEquals(69, bytes[params.dataOffset] & 0xff);
+        assertEquals(0, bytes[params.dataOffset + 1] & 0xff);
+        assertEquals(127, bytes[params.dataOffset + 2] & 0xff);
     }
 
     private static Chunk find(List<Chunk> chunks, int tag) {
