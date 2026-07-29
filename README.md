@@ -15,18 +15,32 @@ O aplicativo detecta o pitch fundamental de cada sample, afina cada nota para a 
 
 ## DirectWave monolítico
 
-A versão 0.3 consegue transformar o WAV recém-gerado em um instrumento `.dwp` para DirectWave no FL Studio Mobile e no FL Studio para PC.
+A versão 0.4 transforma o WAV recém-gerado em um instrumento `.dwp` para DirectWave no FL Studio Mobile e no FL Studio para PC.
 
 - **Chromatic inteira:** cria uma zona para cada nota gerada.
 - **Trecho personalizado:** escolha a primeira e a última nota pelo índice dentro da chromatic, começando em 1.
-- Cada zona fica associada exatamente à sua própria tecla MIDI.
+- Dentro do range, cada zona continua associada exatamente à própria tecla MIDI.
+- A primeira zona se estende até a nota MIDI 0. Notas abaixo do range reutilizam o primeiro sample com pitch normal de sampler.
+- A última zona se estende até a nota MIDI 127. Notas acima do range reutilizam o último sample com pitch normal de sampler.
 - O gap entre as notas não é incluído nos samples.
 - O áudio PCM 16-bit fica embutido dentro do próprio `.dwp`; não é necessário transportar uma pasta de WAVs junto.
 - O arquivo é salvo na mesma pasta selecionada para a chromatic.
 
-Exemplo: em uma chromatic de 24 notas, escolher `5` como primeira e `12` como última gera um DWP com oito zonas, correspondentes somente às notas 5–12.
+Exemplo: em uma chromatic de 24 notas, escolher `5` como primeira e `12` como última gera um DWP com oito zonas. A quinta nota da chromatic cobre também as teclas abaixo dela, e a décima segunda cobre as teclas acima dela.
 
-## Recursos da versão 0.3
+## Loop DirectWave
+
+A opção **Ativar loop sustentado no DWP** grava pontos de loop em cada zona.
+
+- O início e o fim são configurados em porcentagem da duração da nota.
+- Os valores padrão são 35% e 90%.
+- O início é aproximado para um cruzamento ascendente por zero.
+- O fim é procurado ao redor do valor escolhido para encontrar uma fase parecida com a região inicial, reduzindo estalos na repetição.
+- O loop pode ser desligado para manter o comportamento seco da versão anterior.
+
+O loop funciona melhor quando o trecho escolhido tem volume e timbre relativamente estáveis. Samples com fala muito curta, consoantes fortes ou grande mudança de timbre podem precisar de ajustes nos percentuais.
+
+## Recursos da versão 0.4
 
 - Seleção de pasta pelo Storage Access Framework do Android, sem permissão ampla de armazenamento.
 - Detecção automática de `1.wav`, `2.wav`, `3.wav`…
@@ -41,6 +55,8 @@ Exemplo: em uma chromatic de 24 notas, escolher `5` como primeira e `12` como ú
 - Exportação da chromatic e dos samples afinados.
 - Prévia do WAV gerado dentro do aplicativo.
 - Exportação DirectWave `.dwp` monolítica, completa ou por intervalo.
+- Extensão automática das zonas de borda por todo o teclado MIDI.
+- Loop DirectWave opcional com alinhamento automático de fase.
 - Processamento totalmente offline, sem servidor e sem API.
 
 ## Como baixar o APK gerado pelo GitHub
@@ -74,7 +90,7 @@ O port substitui Praat/Parselmouth por um motor Java offline que inclui:
 - Pitch shifting vocal por TD-PSOLA com preservação de formantes.
 - Fallback SOLA para ataques, consoantes e regiões sem periodicidade suficiente.
 - Fade, normalização, concatenação e codificação WAV PCM 16-bit.
-- Escrita do formato DirectWave `DwPr` com zonas MIDI e samples PCM embutidos.
+- Escrita do formato DirectWave `DwPr` com zonas MIDI, pontos de loop e samples PCM embutidos.
 
 ## Licença
 
