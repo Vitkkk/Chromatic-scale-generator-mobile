@@ -5,4 +5,5 @@
     <string name="generate">Gerar chromatic.wav</string>
     <string name="preview">Ouvir resultado</string>
     <string name="stop_preview">Parar prévia</string>
+    <string name="create_dwp">Criar DirectWave (.dwp)</string>
 </resources>
