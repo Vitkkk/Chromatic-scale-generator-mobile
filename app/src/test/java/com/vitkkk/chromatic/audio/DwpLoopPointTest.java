@@ -26,4 +26,20 @@ public class DwpLoopPointTest {
         float end = audio[loop[1]];
         assertTrue(Math.abs(start - end) < 0.08f);
     }
+
+    @Test
+    public void supportsShortestAllowedChromaticNote() {
+        int sampleRate = 48000;
+        float[] audio = new float[1920];
+        for (int i = 0; i < audio.length; i++) {
+            audio[i] = (float) Math.sin(2.0 * Math.PI * 300.0 * i / sampleRate);
+        }
+
+        int[] loop = DwpExporter.chooseLoopPoints(audio, 0, audio.length,
+                sampleRate, 35, 90);
+
+        assertTrue(loop[0] >= 0);
+        assertTrue(loop[1] > loop[0]);
+        assertTrue(loop[1] <= audio.length);
+    }
 }
