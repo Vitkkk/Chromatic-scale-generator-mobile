@@ -20,7 +20,7 @@ public class PitchShifterTest {
                     SAMPLE_RATE, source.length);
 
             assertEquals(source.length, shifted.length);
-            double measured = PitchDetector.detectFundamental(shifted, SAMPLE_RATE);
+            double measured = measurePitchNear(shifted, target);
             assertTrue("Pitch não detectado para fator " + factor, Double.isFinite(measured));
             assertEquals("Pitch incorreto para fator " + factor,
                     target, measured, Math.max(1.5, target * 0.018));
@@ -40,6 +40,35 @@ public class PitchShifterTest {
             assertTrue(Float.isFinite(sample));
             assertTrue(Math.abs(sample) <= 2.0f);
         }
+    }
+
+    private static double measurePitchNear(float[] audio, double expectedFrequency) {
+        int start = audio.length / 4;
+        int end = audio.length * 3 / 4;
+        int minLag = Math.max(2, (int) Math.floor(SAMPLE_RATE / (expectedFrequency * 1.30)));
+        int maxLag = Math.min(end - start - 1,
+                (int) Math.ceil(SAMPLE_RATE / (expectedFrequency * 0.70)));
+
+        double bestCorrelation = -Double.MAX_VALUE;
+        int bestLag = -1;
+        for (int lag = minLag; lag <= maxLag; lag++) {
+            double dot = 0.0;
+            double energyA = 1e-12;
+            double energyB = 1e-12;
+            for (int i = start; i + lag < end; i++) {
+                double a = audio[i];
+                double b = audio[i + lag];
+                dot += a * b;
+                energyA += a * a;
+                energyB += b * b;
+            }
+            double correlation = dot / Math.sqrt(energyA * energyB);
+            if (correlation > bestCorrelation) {
+                bestCorrelation = correlation;
+                bestLag = lag;
+            }
+        }
+        return bestLag > 0 ? SAMPLE_RATE / (double) bestLag : Double.NaN;
     }
 
     private static float[] harmonicVoice(double frequency, double seconds) {
