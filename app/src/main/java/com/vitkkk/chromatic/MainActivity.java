@@ -21,6 +21,7 @@ import androidx.documentfile.provider.DocumentFile;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.vitkkk.chromatic.audio.ChromaticGenerator;
+import com.vitkkk.chromatic.audio.DwpExporter;
 
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -35,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
     private MaterialButton selectFolderButton;
     private MaterialButton generateButton;
     private MaterialButton previewButton;
+    private MaterialButton dwpButton;
     private TextView folderText;
     private TextView detectedSamplesText;
     private TextView statusText;
@@ -44,15 +46,21 @@ public class MainActivity extends AppCompatActivity {
     private EditText gapInput;
     private EditText fadeInput;
     private EditText fileNameInput;
+    private EditText dwpRangeStartInput;
+    private EditText dwpRangeEndInput;
+    private EditText dwpFileNameInput;
     private Spinner startNoteSpinner;
     private Spinner startOctaveSpinner;
     private MaterialSwitch normalizeSwitch;
     private MaterialSwitch dumpSamplesSwitch;
+    private MaterialSwitch dwpEntireSwitch;
     private ProgressBar progressBar;
 
     private Uri folderUri;
     private Uri generatedUri;
+    private ChromaticGenerator.Config generatedConfig;
     private MediaPlayer mediaPlayer;
+    private boolean busy;
 
     private final ActivityResultLauncher<Uri> folderPicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocumentTree(), this::onFolderSelected);
@@ -67,6 +75,8 @@ public class MainActivity extends AppCompatActivity {
         selectFolderButton.setOnClickListener(view -> folderPicker.launch(folderUri));
         generateButton.setOnClickListener(view -> startGeneration());
         previewButton.setOnClickListener(view -> togglePreview());
+        dwpButton.setOnClickListener(view -> startDwpExport());
+        dwpEntireSwitch.setOnCheckedChangeListener((button, checked) -> updateDwpControls());
 
         String savedUri = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_FOLDER_URI, null);
         if (!TextUtils.isEmpty(savedUri)) {
@@ -74,12 +84,14 @@ public class MainActivity extends AppCompatActivity {
             updateFolderUi();
             detectSamplesAsync();
         }
+        updateDwpControls();
     }
 
     private void bindViews() {
         selectFolderButton = findViewById(R.id.selectFolderButton);
         generateButton = findViewById(R.id.generateButton);
         previewButton = findViewById(R.id.previewButton);
+        dwpButton = findViewById(R.id.dwpButton);
         folderText = findViewById(R.id.folderText);
         detectedSamplesText = findViewById(R.id.detectedSamplesText);
         statusText = findViewById(R.id.statusText);
@@ -89,10 +101,14 @@ public class MainActivity extends AppCompatActivity {
         gapInput = findViewById(R.id.gapInput);
         fadeInput = findViewById(R.id.fadeInput);
         fileNameInput = findViewById(R.id.fileNameInput);
+        dwpRangeStartInput = findViewById(R.id.dwpRangeStartInput);
+        dwpRangeEndInput = findViewById(R.id.dwpRangeEndInput);
+        dwpFileNameInput = findViewById(R.id.dwpFileNameInput);
         startNoteSpinner = findViewById(R.id.startNoteSpinner);
         startOctaveSpinner = findViewById(R.id.startOctaveSpinner);
         normalizeSwitch = findViewById(R.id.normalizeSwitch);
         dumpSamplesSwitch = findViewById(R.id.dumpSamplesSwitch);
+        dwpEntireSwitch = findViewById(R.id.dwpEntireSwitch);
         progressBar = findViewById(R.id.progressBar);
     }
 
@@ -115,12 +131,20 @@ public class MainActivity extends AppCompatActivity {
         } catch (SecurityException ignored) {
         }
         folderUri = uri;
-        generatedUri = null;
-        previewButton.setEnabled(false);
+        resetGeneratedState();
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putString(PREF_FOLDER_URI, uri.toString()).apply();
         updateFolderUi();
         detectSamplesAsync();
+    }
+
+    private void resetGeneratedState() {
+        stopPreview();
+        generatedUri = null;
+        generatedConfig = null;
+        previewButton.setEnabled(false);
+        dwpButton.setEnabled(false);
+        updateDwpControls();
     }
 
     private void updateFolderUi() {
@@ -161,8 +185,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        stopPreview();
-        generatedUri = null;
+        resetGeneratedState();
         setBusy(true);
         statusText.setText("Preparando geração…");
         progressBar.setProgress(0);
@@ -177,10 +200,11 @@ public class MainActivity extends AppCompatActivity {
                         }));
                 runOnUiThread(() -> {
                     generatedUri = result.outputUri;
+                    generatedConfig = config;
+                    prepareDwpDefaults(config);
                     setBusy(false);
-                    previewButton.setEnabled(true);
                     statusText.setText(String.format(Locale.getDefault(),
-                            "Pronto: %d notas, %d samples, %.2f s. O WAV foi salvo na pasta selecionada.",
+                            "Pronto: %d notas, %d samples, %.2f s. Agora você pode ouvir ou criar o DWP.",
                             result.noteCount, result.sampleCount, result.durationSeconds));
                     Toast.makeText(this, "Chromatic gerada com sucesso!", Toast.LENGTH_LONG).show();
                 });
@@ -188,6 +212,72 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     setBusy(false);
                     statusText.setText("Falha na geração.");
+                    showError(error.getMessage() == null
+                            ? error.getClass().getSimpleName() : error.getMessage());
+                });
+            }
+        });
+    }
+
+    private void prepareDwpDefaults(ChromaticGenerator.Config config) {
+        dwpRangeStartInput.setText("1");
+        dwpRangeEndInput.setText(String.valueOf(config.noteCount));
+        dwpFileNameInput.setText(toDwpFileName(config.outputFileName));
+        updateDwpControls();
+    }
+
+    private void startDwpExport() {
+        if (generatedUri == null || generatedConfig == null) {
+            showError("Gere uma chromatic antes de criar o DWP.");
+            return;
+        }
+
+        final int firstNote;
+        final int lastNote;
+        try {
+            if (dwpEntireSwitch.isChecked()) {
+                firstNote = 1;
+                lastNote = generatedConfig.noteCount;
+            } else {
+                firstNote = parseInteger(dwpRangeStartInput, "Primeira nota do DWP");
+                lastNote = parseInteger(dwpRangeEndInput, "Última nota do DWP");
+            }
+        } catch (IllegalArgumentException error) {
+            showError(error.getMessage());
+            return;
+        }
+
+        String outputName = dwpFileNameInput.getText() == null
+                ? "chromatic.dwp" : dwpFileNameInput.getText().toString();
+        int startMidi = 12 * (generatedConfig.startOctave + 1) + generatedConfig.startNote;
+
+        stopPreview();
+        setBusy(true);
+        progressBar.setProgress(0);
+        statusText.setText("Preparando DirectWave…");
+
+        executor.execute(() -> {
+            try {
+                DwpExporter.Result result = DwpExporter.export(
+                        this, getContentResolver(), folderUri, generatedUri, outputName,
+                        startMidi, generatedConfig.noteCount,
+                        generatedConfig.noteDurationMs, generatedConfig.gapMs,
+                        firstNote, lastNote,
+                        (percent, message) -> runOnUiThread(() -> {
+                            progressBar.setProgress(percent);
+                            statusText.setText(message);
+                        }));
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    statusText.setText(String.format(Locale.getDefault(),
+                            "DWP salvo: %d notas, MIDI %d–%d. Samples embutidos no próprio arquivo.",
+                            result.zoneCount, result.firstMidi, result.lastMidi));
+                    Toast.makeText(this, "DirectWave .dwp criado com sucesso!", Toast.LENGTH_LONG).show();
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    statusText.setText("Falha ao criar o DWP.");
                     showError(error.getMessage() == null
                             ? error.getClass().getSimpleName() : error.getMessage());
                 });
@@ -263,11 +353,33 @@ public class MainActivity extends AppCompatActivity {
         if (previewButton != null) previewButton.setText(R.string.preview);
     }
 
-    private void setBusy(boolean busy) {
-        progressBar.setVisibility(busy ? View.VISIBLE : View.GONE);
-        selectFolderButton.setEnabled(!busy);
-        generateButton.setEnabled(!busy);
-        previewButton.setEnabled(!busy && generatedUri != null);
+    private void setBusy(boolean isBusy) {
+        busy = isBusy;
+        progressBar.setVisibility(isBusy ? View.VISIBLE : View.GONE);
+        selectFolderButton.setEnabled(!isBusy);
+        generateButton.setEnabled(!isBusy);
+        boolean hasResult = generatedUri != null && generatedConfig != null;
+        previewButton.setEnabled(!isBusy && hasResult);
+        dwpButton.setEnabled(!isBusy && hasResult);
+        updateDwpControls();
+    }
+
+    private void updateDwpControls() {
+        boolean hasResult = generatedUri != null && generatedConfig != null;
+        dwpEntireSwitch.setEnabled(!busy && hasResult);
+        dwpFileNameInput.setEnabled(!busy && hasResult);
+        boolean customRange = !busy && hasResult && !dwpEntireSwitch.isChecked();
+        dwpRangeStartInput.setEnabled(customRange);
+        dwpRangeEndInput.setEnabled(customRange);
+    }
+
+    private String toDwpFileName(String wavName) {
+        String name = wavName == null ? "chromatic" : wavName.trim();
+        if (name.isEmpty()) name = "chromatic";
+        if (name.toLowerCase(Locale.ROOT).endsWith(".wav")) {
+            name = name.substring(0, name.length() - 4);
+        }
+        return name + ".dwp";
     }
 
     private void showError(String message) {
