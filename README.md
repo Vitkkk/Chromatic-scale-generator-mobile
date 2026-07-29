@@ -9,10 +9,24 @@ Port Android do **Chromatic Scale Generator** para criação de chromatics de FN
 3. Abra o aplicativo e selecione essa pasta.
 4. Escolha a nota inicial, oitava, quantidade de notas, duração, gap e demais opções.
 5. Toque em **Gerar chromatic.wav**.
+6. Depois da geração, ouça o resultado ou toque em **Criar DirectWave (.dwp)**.
 
 O aplicativo detecta o pitch fundamental de cada sample, afina cada nota para a frequência musical desejada, preserva os formantes da voz para evitar o efeito “Alvin”, mantém uma duração configurável e gera um WAV mono PCM 16-bit em 48 kHz. Opcionalmente, também cria a pasta `pitched_samples` com cada nota separada.
 
-## Recursos da versão 0.2
+## DirectWave monolítico
+
+A versão 0.3 consegue transformar o WAV recém-gerado em um instrumento `.dwp` para DirectWave no FL Studio Mobile e no FL Studio para PC.
+
+- **Chromatic inteira:** cria uma zona para cada nota gerada.
+- **Trecho personalizado:** escolha a primeira e a última nota pelo índice dentro da chromatic, começando em 1.
+- Cada zona fica associada exatamente à sua própria tecla MIDI.
+- O gap entre as notas não é incluído nos samples.
+- O áudio PCM 16-bit fica embutido dentro do próprio `.dwp`; não é necessário transportar uma pasta de WAVs junto.
+- O arquivo é salvo na mesma pasta selecionada para a chromatic.
+
+Exemplo: em uma chromatic de 24 notas, escolher `5` como primeira e `12` como última gera um DWP com oito zonas, correspondentes somente às notas 5–12.
+
+## Recursos da versão 0.3
 
 - Seleção de pasta pelo Storage Access Framework do Android, sem permissão ampla de armazenamento.
 - Detecção automática de `1.wav`, `2.wav`, `3.wav`…
@@ -26,6 +40,7 @@ O aplicativo detecta o pitch fundamental de cada sample, afina cada nota para a 
 - Normalização opcional.
 - Exportação da chromatic e dos samples afinados.
 - Prévia do WAV gerado dentro do aplicativo.
+- Exportação DirectWave `.dwp` monolítica, completa ou por intervalo.
 - Processamento totalmente offline, sem servidor e sem API.
 
 ## Como baixar o APK gerado pelo GitHub
@@ -59,6 +74,7 @@ O port substitui Praat/Parselmouth por um motor Java offline que inclui:
 - Pitch shifting vocal por TD-PSOLA com preservação de formantes.
 - Fallback SOLA para ataques, consoantes e regiões sem periodicidade suficiente.
 - Fade, normalização, concatenação e codificação WAV PCM 16-bit.
+- Escrita do formato DirectWave `DwPr` com zonas MIDI e samples PCM embutidos.
 
 ## Licença
 
