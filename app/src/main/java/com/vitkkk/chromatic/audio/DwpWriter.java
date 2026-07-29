@@ -36,23 +36,38 @@ public final class DwpWriter {
         public final float[] samples;
         public final int offset;
         public final int length;
+        public final boolean loopEnabled;
+        public final int loopStart;
+        public final int loopEnd;
 
         public Zone(int midiNote, String name, float[] samples) {
-            this(midiNote, name, samples, 0, samples == null ? 0 : samples.length);
+            this(midiNote, name, samples, 0, samples == null ? 0 : samples.length,
+                    false, 0, 0);
         }
 
         public Zone(int midiNote, String name, float[] samples, int offset, int length) {
+            this(midiNote, name, samples, offset, length, false, 0, 0);
+        }
+
+        public Zone(int midiNote, String name, float[] samples, int offset, int length,
+                    boolean loopEnabled, int loopStart, int loopEnd) {
             if (midiNote < 0 || midiNote > 127) {
                 throw new IllegalArgumentException("A nota MIDI deve ficar entre 0 e 127.");
             }
             if (samples == null || offset < 0 || length <= 0 || offset + length > samples.length) {
                 throw new IllegalArgumentException("Trecho de áudio inválido para a zona DirectWave.");
             }
+            if (loopEnabled && (loopStart < 0 || loopEnd <= loopStart || loopEnd > length)) {
+                throw new IllegalArgumentException("Pontos de loop inválidos para a zona DirectWave.");
+            }
             this.midiNote = midiNote;
             this.name = name;
             this.samples = samples;
             this.offset = offset;
             this.length = length;
+            this.loopEnabled = loopEnabled;
+            this.loopStart = loopEnabled ? loopStart : 0;
+            this.loopEnd = loopEnabled ? loopEnd : 0;
         }
     }
 
@@ -73,7 +88,8 @@ public final class DwpWriter {
         byte[] global = buildGlobalSection(programName, zones.size());
         long programLength = global.length + chunkSize(0);
         for (int i = 0; i < zones.size(); i++) {
-            programLength = checkedAdd(programLength, chunkSize(zonePayloadSize(programName, zones.get(i), i)));
+            programLength = checkedAdd(programLength,
+                    chunkSize(zonePayloadSize(programName, zones.get(i), i)));
         }
 
         output.write("DwPr".getBytes(StandardCharsets.US_ASCII));
@@ -83,7 +99,7 @@ public final class DwpWriter {
         output.write(global);
 
         for (int i = 0; i < zones.size(); i++) {
-            writeZone(output, programName, zones.get(i), i, sampleRate);
+            writeZone(output, programName, zones.get(i), i, zones.size(), sampleRate);
             if (listener != null) listener.onZoneWritten(i + 1, zones.size());
         }
         writeChunk(output, 2, new byte[0]);
@@ -139,14 +155,16 @@ public final class DwpWriter {
     }
 
     private static void writeZone(OutputStream out, String programName, Zone zone,
-                                  int index, int sampleRate) throws IOException {
+                                  int index, int zoneCount, int sampleRate) throws IOException {
         long payloadSize = zonePayloadSize(programName, zone, index);
         writeChunkHeader(out, 3, payloadSize);
 
         byte[] params = ZONE_PARAMS.clone();
+        int lowKey = index == 0 ? 0 : zone.midiNote;
+        int highKey = index == zoneCount - 1 ? 127 : zone.midiNote;
         params[0] = (byte) zone.midiNote;
-        params[1] = (byte) zone.midiNote;
-        params[2] = (byte) zone.midiNote;
+        params[1] = (byte) lowKey;
+        params[2] = (byte) highKey;
         writeChunk(out, 500, params);
 
         String zoneName = zoneName(programName, zone, index);
@@ -156,6 +174,18 @@ public final class DwpWriter {
         byte[] sampleInfo = SAMPLE_INFO.clone();
         putIntLE(sampleInfo, 0, zone.length);
         putFloatLE(sampleInfo, 16, sampleRate);
+        if (zone.loopEnabled) {
+            /*
+             * DirectWave stores the four sample-position fields in this order:
+             * sample start, sample end, loop start and loop end. The second
+             * uint32 selects the loop scheme; 1 is a forward/sustain loop.
+             */
+            putIntLE(sampleInfo, 4, 1);
+            putIntLE(sampleInfo, 20, 0);
+            putIntLE(sampleInfo, 24, zone.length);
+            putIntLE(sampleInfo, 28, zone.loopStart);
+            putIntLE(sampleInfo, 32, zone.loopEnd);
+        }
         writeChunk(out, 503, sampleInfo);
 
         writeChunk(out, 504, ZONE_504);
@@ -207,7 +237,8 @@ public final class DwpWriter {
         String fallback = "Note_" + zone.midiNote;
         String requested = zone.name == null || zone.name.trim().isEmpty() ? fallback : zone.name;
         String clean = sanitizeAscii(requested, fallback, 64);
-        return sanitizeAscii(programName + "_" + clean + "_" + String.format(java.util.Locale.US, "%03d", index + 1),
+        return sanitizeAscii(programName + "_" + clean + "_"
+                        + String.format(java.util.Locale.US, "%03d", index + 1),
                 fallback, 120);
     }
 
@@ -248,7 +279,8 @@ public final class DwpWriter {
         out.write(payload);
     }
 
-    private static void writeChunkHeader(OutputStream out, int tag, long payloadLength) throws IOException {
+    private static void writeChunkHeader(OutputStream out, int tag, long payloadLength)
+            throws IOException {
         if (payloadLength < 0) throw new IllegalArgumentException("Tamanho de chunk inválido.");
         writeIntLE(out, tag);
         writeLongLE(out, payloadLength);
