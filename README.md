@@ -10,9 +10,9 @@ Port Android do **Chromatic Scale Generator** para criação de chromatics de FN
 4. Escolha a nota inicial, oitava, quantidade de notas, duração, gap e demais opções.
 5. Toque em **Gerar chromatic.wav**.
 
-O aplicativo detecta o pitch fundamental de cada sample, afina cada nota para a frequência musical desejada, mantém uma duração configurável e gera um WAV mono PCM 16-bit em 48 kHz. Opcionalmente, também cria a pasta `pitched_samples` com cada nota separada.
+O aplicativo detecta o pitch fundamental de cada sample, afina cada nota para a frequência musical desejada, preserva os formantes da voz para evitar o efeito “Alvin”, mantém uma duração configurável e gera um WAV mono PCM 16-bit em 48 kHz. Opcionalmente, também cria a pasta `pitched_samples` com cada nota separada.
 
-## Recursos da versão 0.1
+## Recursos da versão 0.2
 
 - Seleção de pasta pelo Storage Access Framework do Android, sem permissão ampla de armazenamento.
 - Detecção automática de `1.wav`, `2.wav`, `3.wav`…
@@ -20,6 +20,8 @@ O aplicativo detecta o pitch fundamental de cada sample, afina cada nota para a 
 - Nota inicial de C a B e oitavas 1 a 6.
 - Quantidade de notas configurável.
 - Duração fixa por nota e gap em milissegundos.
+- Correção automática de formantes semelhante ao **F-Mode** para manter a voz natural.
+- Processamento TD-PSOLA em estágios para mudanças maiores que uma oitava.
 - Fade curto para evitar cliques.
 - Normalização opcional.
 - Exportação da chromatic e dos samples afinados.
@@ -54,7 +56,8 @@ O port substitui Praat/Parselmouth por um motor Java offline que inclui:
 - Leitura de WAV PCM 8/16/24/32-bit e IEEE float 32-bit.
 - Conversão para mono e 48 kHz.
 - Detecção de frequência fundamental baseada em YIN.
-- Pitch resampling com compensação de duração por SOLA.
+- Pitch shifting vocal por TD-PSOLA com preservação de formantes.
+- Fallback SOLA para ataques, consoantes e regiões sem periodicidade suficiente.
 - Fade, normalização, concatenação e codificação WAV PCM 16-bit.
 
 ## Licença
