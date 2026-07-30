@@ -45,6 +45,8 @@ public class MainActivity extends AppCompatActivity {
     private EditText noteDurationInput;
     private EditText gapInput;
     private EditText fadeInput;
+    private EditText dynamicHoldInput;
+    private EditText dynamicGlideInput;
     private EditText fileNameInput;
     private EditText dwpRangeStartInput;
     private EditText dwpRangeEndInput;
@@ -53,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText dwpLoopEndInput;
     private Spinner startNoteSpinner;
     private Spinner startOctaveSpinner;
+    private MaterialSwitch dynamicPitchSwitch;
     private MaterialSwitch normalizeSwitch;
     private MaterialSwitch dumpSamplesSwitch;
     private MaterialSwitch dwpEntireSwitch;
@@ -79,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
         generateButton.setOnClickListener(view -> startGeneration());
         previewButton.setOnClickListener(view -> togglePreview());
         dwpButton.setOnClickListener(view -> startDwpExport());
+        dynamicPitchSwitch.setOnCheckedChangeListener((button, checked) -> updateGenerationControls());
         dwpEntireSwitch.setOnCheckedChangeListener((button, checked) -> updateDwpControls());
         dwpLoopSwitch.setOnCheckedChangeListener((button, checked) -> updateDwpControls());
 
@@ -88,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
             updateFolderUi();
             detectSamplesAsync();
         }
+        updateGenerationControls();
         updateDwpControls();
     }
 
@@ -104,6 +109,8 @@ public class MainActivity extends AppCompatActivity {
         noteDurationInput = findViewById(R.id.noteDurationInput);
         gapInput = findViewById(R.id.gapInput);
         fadeInput = findViewById(R.id.fadeInput);
+        dynamicHoldInput = findViewById(R.id.dynamicHoldInput);
+        dynamicGlideInput = findViewById(R.id.dynamicGlideInput);
         fileNameInput = findViewById(R.id.fileNameInput);
         dwpRangeStartInput = findViewById(R.id.dwpRangeStartInput);
         dwpRangeEndInput = findViewById(R.id.dwpRangeEndInput);
@@ -112,6 +119,7 @@ public class MainActivity extends AppCompatActivity {
         dwpLoopEndInput = findViewById(R.id.dwpLoopEndInput);
         startNoteSpinner = findViewById(R.id.startNoteSpinner);
         startOctaveSpinner = findViewById(R.id.startOctaveSpinner);
+        dynamicPitchSwitch = findViewById(R.id.dynamicPitchSwitch);
         normalizeSwitch = findViewById(R.id.normalizeSwitch);
         dumpSamplesSwitch = findViewById(R.id.dumpSamplesSwitch);
         dwpEntireSwitch = findViewById(R.id.dwpEntireSwitch);
@@ -174,8 +182,7 @@ public class MainActivity extends AppCompatActivity {
                 int count = folder == null ? 0 : ChromaticGenerator.countNumberedSamples(folder);
                 runOnUiThread(() -> detectedSamplesText.setText("Samples detectados: " + count));
             } catch (Exception error) {
-                runOnUiThread(() ->
-                        detectedSamplesText.setText("Não foi possível ler a pasta."));
+                runOnUiThread(() -> detectedSamplesText.setText("Não foi possível ler a pasta."));
             }
         });
     }
@@ -212,9 +219,10 @@ public class MainActivity extends AppCompatActivity {
                     generatedConfig = config;
                     prepareDwpDefaults(config);
                     setBusy(false);
+                    String dynamicText = config.dynamicPitchAttack ? " Ataque dinâmico aplicado." : "";
                     statusText.setText(String.format(Locale.getDefault(),
-                            "Pronto: %d notas, %d samples, %.2f s. Agora você pode ouvir ou criar o DWP.",
-                            result.noteCount, result.sampleCount, result.durationSeconds));
+                            "Pronto: %d notas, %d samples, %.2f s.%s Agora você pode ouvir ou criar o DWP.",
+                            result.noteCount, result.sampleCount, result.durationSeconds, dynamicText));
                     Toast.makeText(this, "Chromatic gerada com sucesso!",
                             Toast.LENGTH_LONG).show();
                 });
@@ -298,9 +306,7 @@ public class MainActivity extends AppCompatActivity {
                         }));
                 runOnUiThread(() -> {
                     setBusy(false);
-                    String loopText = result.loopEnabled
-                            ? " Loop contínuo embutido."
-                            : "";
+                    String loopText = result.loopEnabled ? " Loop contínuo embutido." : "";
                     statusText.setText(String.format(Locale.getDefault(),
                             "DWP salvo: %d zonas, MIDI %d–%d. A primeira e a última cobrem o teclado inteiro.%s",
                             result.zoneCount, result.firstMidi, result.lastMidi, loopText));
@@ -327,6 +333,11 @@ public class MainActivity extends AppCompatActivity {
         config.noteDurationMs = parseInteger(noteDurationInput, "Duração da nota");
         config.gapMs = parseInteger(gapInput, "Gap");
         config.fadeMs = parseInteger(fadeInput, "Fade");
+        config.dynamicPitchAttack = dynamicPitchSwitch.isChecked();
+        config.dynamicHoldMs = config.dynamicPitchAttack
+                ? parseInteger(dynamicHoldInput, "Pitch original") : 20;
+        config.dynamicGlideMs = config.dynamicPitchAttack
+                ? parseInteger(dynamicGlideInput, "Transição dinâmica") : 45;
         config.normalize = normalizeSwitch.isChecked();
         config.dumpSamples = dumpSamplesSwitch.isChecked();
         config.outputFileName = fileNameInput.getText() == null
@@ -336,9 +347,7 @@ public class MainActivity extends AppCompatActivity {
 
     private int parseInteger(EditText input, String label) {
         String value = input.getText() == null ? "" : input.getText().toString().trim();
-        if (value.isEmpty()) {
-            throw new IllegalArgumentException(label + " não pode ficar vazio.");
-        }
+        if (value.isEmpty()) throw new IllegalArgumentException(label + " não pode ficar vazio.");
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException error) {
@@ -396,7 +405,15 @@ public class MainActivity extends AppCompatActivity {
         boolean hasResult = generatedUri != null && generatedConfig != null;
         previewButton.setEnabled(!isBusy && hasResult);
         dwpButton.setEnabled(!isBusy && hasResult);
+        updateGenerationControls();
         updateDwpControls();
+    }
+
+    private void updateGenerationControls() {
+        dynamicPitchSwitch.setEnabled(!busy);
+        boolean dynamicAvailable = !busy && dynamicPitchSwitch.isChecked();
+        dynamicHoldInput.setEnabled(dynamicAvailable);
+        dynamicGlideInput.setEnabled(dynamicAvailable);
     }
 
     private void updateDwpControls() {
