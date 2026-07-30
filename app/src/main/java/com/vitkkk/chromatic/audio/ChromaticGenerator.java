@@ -31,6 +31,9 @@ public final class ChromaticGenerator {
         public int noteDurationMs;
         public int gapMs;
         public int fadeMs;
+        public boolean dynamicPitchAttack;
+        public int dynamicHoldMs;
+        public int dynamicGlideMs;
         public boolean normalize;
         public boolean dumpSamples;
         public String outputFileName;
@@ -51,9 +54,11 @@ public final class ChromaticGenerator {
     }
 
     private static final class SourceSample {
+        final float[] originalAudio;
         final PitchShifter.Analysis analysis;
 
-        SourceSample(PitchShifter.Analysis analysis) {
+        SourceSample(float[] originalAudio, PitchShifter.Analysis analysis) {
+            this.originalAudio = originalAudio;
             this.analysis = analysis;
         }
     }
@@ -85,7 +90,8 @@ public final class ChromaticGenerator {
 
         int sampleCount = config.requestedSampleCount <= 0 ? detected : config.requestedSampleCount;
         if (sampleCount > detected) {
-            throw new IOException("Foram pedidos " + sampleCount + " samples, mas só " + detected + " foram encontrados em sequência.");
+            throw new IOException("Foram pedidos " + sampleCount + " samples, mas só " + detected
+                    + " foram encontrados em sequência.");
         }
 
         SourceSample[] sources = new SourceSample[sampleCount];
@@ -104,11 +110,13 @@ public final class ChromaticGenerator {
             }
             PitchShifter.Analysis analysis = PitchShifter.analyze(
                     trimmed, fundamental, OUTPUT_SAMPLE_RATE);
-            sources[i] = new SourceSample(analysis);
+            sources[i] = new SourceSample(trimmed, analysis);
         }
 
         int noteLength = msToSamples(config.noteDurationMs);
         int gapLength = msToSamples(config.gapMs);
+        int dynamicHoldSamples = msToSamples(config.dynamicHoldMs);
+        int dynamicGlideSamples = msToSamples(config.dynamicGlideMs);
         long totalLong = (long) config.noteCount * noteLength
                 + (long) Math.max(0, config.noteCount - 1) * gapLength;
         if (totalLong > Integer.MAX_VALUE) {
@@ -130,8 +138,9 @@ public final class ChromaticGenerator {
         int cursor = 0;
         for (int note = 0; note < config.noteCount; note++) {
             int percent = 25 + (int) Math.round((note / (double) config.noteCount) * 68.0);
-            progress(listener, percent, "Ressintetizando nota " + (note + 1)
-                    + " de " + config.noteCount + "…");
+            progress(listener, percent, (config.dynamicPitchAttack
+                    ? "Criando ataque dinâmico da nota " : "Ressintetizando nota ")
+                    + (note + 1) + " de " + config.noteCount + "…");
 
             SourceSample source = sources[note % sampleCount];
             int absoluteSemitone = config.startNote + note;
@@ -141,6 +150,11 @@ public final class ChromaticGenerator {
             double targetFrequency = 440.0 * Math.pow(2.0, (midi - 69) / 12.0);
 
             float[] pitched = PitchShifter.shift(source.analysis, targetFrequency, noteLength);
+            if (config.dynamicPitchAttack) {
+                float[] original = DynamicPitchAttack.timeMapLinear(source.originalAudio, noteLength);
+                pitched = DynamicPitchAttack.apply(original, pitched,
+                        dynamicHoldSamples, dynamicGlideSamples);
+            }
             applyFade(pitched, msToSamples(config.fadeMs));
             if (config.normalize) normalize(pitched, 0.94f);
 
@@ -212,6 +226,15 @@ public final class ChromaticGenerator {
         }
         if (config.fadeMs < 0 || config.fadeMs > config.noteDurationMs / 2) {
             throw new IllegalArgumentException("O fade deve ser menor que metade da duração da nota.");
+        }
+        if (config.dynamicHoldMs < 0 || config.dynamicHoldMs > 2000) {
+            throw new IllegalArgumentException("O pitch original deve ficar entre 0 e 2000 ms.");
+        }
+        if (config.dynamicGlideMs < 0 || config.dynamicGlideMs > 2000) {
+            throw new IllegalArgumentException("A transição dinâmica deve ficar entre 0 e 2000 ms.");
+        }
+        if (config.dynamicPitchAttack && config.dynamicHoldMs == 0 && config.dynamicGlideMs == 0) {
+            throw new IllegalArgumentException("Defina algum tempo de pitch original ou de transição dinâmica.");
         }
     }
 
