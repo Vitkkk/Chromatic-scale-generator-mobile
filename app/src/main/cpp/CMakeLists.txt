@@ -1,47 +1,66 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(chromatic_pitch LANGUAGES CXX)
+project(chromatic_pitch LANGUAGES C CXX)
 
 include(FetchContent)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Pin the professional pitch engine to the audited 4.0.0 release. The source is
-# downloaded at configure time and compiled into the APK with the Android NDK.
+# The Windows executable embeds praat-parselmouth 0.4.1, which is based on
+# Praat 6.1.38. Build that exact source tree so Android executes the same
+# Sound -> Manipulation -> PitchTier -> overlap-add pipeline as the desktop.
 FetchContent_Declare(
-        rubberband
-        GIT_REPOSITORY https://github.com/breakfastquay/rubberband.git
-        GIT_TAG v4.0.0
+        parselmouth_source
+        GIT_REPOSITORY https://github.com/YannickJadoul/Parselmouth.git
+        GIT_TAG v0.4.1
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE
 )
-FetchContent_GetProperties(rubberband)
-if (NOT rubberband_POPULATED)
-    FetchContent_Populate(rubberband)
+FetchContent_GetProperties(parselmouth_source)
+if (NOT parselmouth_source_POPULATED)
+    FetchContent_Populate(parselmouth_source)
 endif ()
+
+# Parselmouth's top-level CMake also builds Python bindings. Android only needs
+# its vendored fmt dependency and the native Praat library.
+add_subdirectory(
+        ${parselmouth_source_SOURCE_DIR}/extern
+        ${CMAKE_CURRENT_BINARY_DIR}/parselmouth-extern
+        EXCLUDE_FROM_ALL
+)
+add_subdirectory(
+        ${parselmouth_source_SOURCE_DIR}/praat
+        ${CMAKE_CURRENT_BINARY_DIR}/parselmouth-praat
+        EXCLUDE_FROM_ALL
+)
+
+set_target_properties(praat fmt PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
 add_library(
         chromatic_pitch
         SHARED
         native_pitch_shifter.cpp
-        ${rubberband_SOURCE_DIR}/single/RubberBandSingle.cpp
-)
-
-target_include_directories(
-        chromatic_pitch
-        PRIVATE
-        ${rubberband_SOURCE_DIR}
 )
 
 target_compile_features(chromatic_pitch PRIVATE cxx_std_17)
 target_compile_options(
         chromatic_pitch
         PRIVATE
-        -O3
+        -O2
         -fexceptions
         -frtti
-        -ffast-math
+        -Wno-unknown-pragmas
 )
 
-# Android 15 can run on devices using 16 KB memory pages. NDK r27 needs these
-# explicit linker flags so the ELF LOAD segments work on both 4 KB and 16 KB.
+target_include_directories(
+        chromatic_pitch
+        PRIVATE
+        ${parselmouth_source_SOURCE_DIR}
+        ${parselmouth_source_SOURCE_DIR}/praat
+        ${parselmouth_source_SOURCE_DIR}/praat/fon
+        ${parselmouth_source_SOURCE_DIR}/praat/melder
+        ${parselmouth_source_SOURCE_DIR}/praat/sys
+)
+
+# Android 15 compatibility for devices using 16 KB memory pages.
 target_link_options(
         chromatic_pitch
         PRIVATE
@@ -51,6 +70,8 @@ target_link_options(
 
 target_link_libraries(
         chromatic_pitch
+        PRIVATE
+        praat
         android
         log
 )
