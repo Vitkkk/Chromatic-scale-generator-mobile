@@ -1,13 +1,25 @@
-# Attribution and porting notes
+# Attribution and third-party notices
 
-This Android application is a clean Android port inspired by the GPL-3.0 Windows project supplied with the development request.
+## Original Windows project
 
-The original program used Python and wxPython for the desktop interface and Praat through `praat-parselmouth` for pitch analysis, pitch-tier replacement and overlap-add resynthesis.
+This Android application is a port inspired by the GPL-3.0 Windows project supplied with the development request.
 
-The Android port does not bundle Praat, Parselmouth or wxPython. Its audio engine is implemented in Java. Version 0.5 follows the publicly documented Praat Manipulation principles: local pitch analysis, voiced/unvoiced intervals, correlation-aligned pulse locations and pitch-synchronous overlap-add. This is an independent implementation rather than copied Praat source code or a bundled Praat binary.
+The original program uses Python, wxPython and Praat through `praat-parselmouth`. Its pitch path is `To Manipulation`, pitch-tier replacement and overlap-add resynthesis. Praat, Parselmouth and wxPython are not bundled in this Android application.
 
-The rest of the audio pipeline performs WAV decoding, conversion to mono/48 kHz, fades, optional normalization and WAV encoding locally on the device.
+## Rubber Band Library
+
+Version 0.8 builds and links **Rubber Band Library 4.0.0** from the official Breakfast Quay source repository.
+
+- Project: Rubber Band Library
+- Copyright: 2007–2024 Particular Programs Ltd. t/a Breakfast Quay
+- Licence: GNU General Public License, version 2 or any later version
+- Source tag: `v4.0.0`
+- Integration: the official `single/RubberBandSingle.cpp` compilation unit is compiled into `libchromatic_pitch.so` using the Android NDK.
+
+The CMake configuration in this repository pins the upstream version and provides the complete build recipe. The application uses the R3/Finer engine, offline high-quality pitch processing, formant preservation and high-consistency dynamic pitch processing.
+
+## DirectWave format
 
 DirectWave support was implemented from binary analysis of a user-supplied `.dwp` reference file and cross-checking against publicly available open-source format research. The exporter writes a monolithic `DwPr` program with MIDI zones, optional loop points and embedded PCM audio; it does not bundle code or binaries from FL Studio or DirectWave.
 
-Both the original project and this port are distributed under GPL-3.0.
+The Android application and the supplied source code are distributed under GPL-3.0.
