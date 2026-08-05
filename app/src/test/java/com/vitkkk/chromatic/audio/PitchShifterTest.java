@@ -5,6 +5,8 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
+import java.util.Random;
+
 public class PitchShifterTest {
     private static final int SAMPLE_RATE = 48000;
     private static final double SOURCE_FREQUENCY = 120.0;
@@ -70,6 +72,73 @@ public class PitchShifterTest {
                 0, shifted.length), 5.0);
     }
 
+    @Test
+    public void doesNotLeakSourcePitchBehindRaisedNote() {
+        float[] source = harmonicVoice(110.0, 0.8);
+        int noisyStart = source.length * 45 / 100;
+        int noisyEnd = source.length * 55 / 100;
+        Random random = new Random(7L);
+        for (int i = noisyStart; i < noisyEnd; i++) {
+            source[i] = (float) (0.03 * (random.nextDouble() * 2.0 - 1.0));
+        }
+
+        PitchShifter.Analysis analysis = PitchShifter.analyze(source, 110.0, SAMPLE_RATE);
+        float[] shifted = PitchShifter.shift(analysis, 220.0, source.length);
+
+        assertFiniteAudio(shifted);
+        double targetEnergy = spectralMagnitude(shifted, 220.0,
+                shifted.length / 5, shifted.length * 4 / 5);
+        double sourceGhost = spectralMagnitude(shifted, 110.0,
+                shifted.length / 5, shifted.length * 4 / 5);
+        assertTrue("A frequência original vazou como uma voz grave atrás da nota",
+                sourceGhost < targetEnergy * 0.40);
+    }
+
+    @Test
+    public void rejectsOctaveAmbiguousPeriodDoubling() {
+        float[] source = alternatingCycleVoice(120.0, 0.8);
+        PitchShifter.Analysis analysis = PitchShifter.analyze(source, 120.0, SAMPLE_RATE);
+        float[] shifted = PitchShifter.shift(analysis, 240.0, source.length);
+
+        assertFiniteAudio(shifted);
+        int fifth = shifted.length / 5;
+        assertEquals(240.0, measurePitchNear(shifted, 240.0,
+                fifth, fifth * 2), 8.0);
+        assertEquals(240.0, measurePitchNear(shifted, 240.0,
+                fifth * 2, fifth * 3), 8.0);
+        assertEquals(240.0, measurePitchNear(shifted, 240.0,
+                fifth * 3, fifth * 4), 8.0);
+
+        double targetEnergy = spectralMagnitude(shifted, 240.0, fifth, fifth * 4);
+        double demonicSubharmonic = spectralMagnitude(shifted, 120.0, fifth, fifth * 4);
+        assertTrue("A sequência de pulsos pulou ciclos e criou uma oitava abaixo",
+                demonicSubharmonic < targetEnergy * 0.45);
+    }
+
+    @Test
+    public void deepDownShiftHasNoNearSilentPitchCollapses() {
+        float[] source = harmonicVoice(240.0, 0.7);
+        PitchShifter.Analysis analysis = PitchShifter.analyze(source, 240.0, SAMPLE_RATE);
+        float[] shifted = PitchShifter.shift(analysis, 60.0, source.length);
+
+        assertFiniteAudio(shifted);
+        assertEquals(60.0, measurePitchNear(shifted, 60.0,
+                shifted.length / 5, shifted.length * 4 / 5), 5.0);
+
+        int window = SAMPLE_RATE / 100;
+        double minimum = Double.POSITIVE_INFINITY;
+        double maximum = 0.0;
+        for (int start = shifted.length / 5;
+             start + window < shifted.length * 4 / 5;
+             start += window) {
+            double rms = rms(shifted, start, start + window);
+            minimum = Math.min(minimum, rms);
+            maximum = Math.max(maximum, rms);
+        }
+        assertTrue("O pitch grave abriu buracos quase silenciosos entre os pulsos",
+                maximum > 1e-6 && minimum / maximum > 0.10);
+    }
+
     private static void assertFiniteAudio(float[] audio) {
         for (float sample : audio) {
             assertTrue(Float.isFinite(sample));
@@ -107,6 +176,24 @@ public class PitchShifterTest {
         return bestLag > 0 ? SAMPLE_RATE / (double) bestLag : Double.NaN;
     }
 
+    private static double spectralMagnitude(float[] audio, double frequency,
+                                            int start, int end) {
+        double real = 0.0;
+        double imaginary = 0.0;
+        for (int i = start; i < end; i++) {
+            double phase = 2.0 * Math.PI * frequency * i / SAMPLE_RATE;
+            real += audio[i] * Math.cos(phase);
+            imaginary -= audio[i] * Math.sin(phase);
+        }
+        return 2.0 * Math.hypot(real, imaginary) / Math.max(1, end - start);
+    }
+
+    private static double rms(float[] audio, int start, int end) {
+        double energy = 0.0;
+        for (int i = start; i < end; i++) energy += audio[i] * audio[i];
+        return Math.sqrt(energy / Math.max(1, end - start));
+    }
+
     private static float[] harmonicVoice(double frequency, double seconds) {
         int length = (int) Math.round(seconds * SAMPLE_RATE);
         float[] audio = new float[length];
@@ -116,9 +203,10 @@ public class PitchShifterTest {
             double phase = 2.0 * Math.PI * frequency * i / SAMPLE_RATE;
             double envelope = attack <= 1 || i >= attack ? 1.0 : i / (double) attack;
             audio[i] = (float) (envelope * (
-                    0.68 * Math.sin(phase)
-                            + 0.22 * Math.sin(2.0 * phase)
-                            + 0.10 * Math.sin(3.0 * phase)));
+                    0.62 * Math.sin(phase)
+                            + 0.24 * Math.sin(2.0 * phase)
+                            + 0.10 * Math.sin(3.0 * phase)
+                            + 0.04 * Math.sin(5.0 * phase)));
         }
         return audio;
     }
@@ -139,6 +227,24 @@ public class PitchShifterTest {
                     0.66 * Math.sin(phase)
                             + 0.23 * Math.sin(2.0 * phase)
                             + 0.11 * Math.sin(3.0 * phase)));
+        }
+        return audio;
+    }
+
+    private static float[] alternatingCycleVoice(double frequency, double seconds) {
+        int length = (int) Math.round(seconds * SAMPLE_RATE);
+        int period = Math.max(1, (int) Math.round(SAMPLE_RATE / frequency));
+        float[] audio = new float[length];
+        for (int i = 0; i < length; i++) {
+            double phase = 2.0 * Math.PI * frequency * i / SAMPLE_RATE;
+            int cycle = i / period;
+            double alternatingGain = (cycle & 1) == 0 ? 1.0 : 0.50;
+            double attack = Math.min(1.0, i / (0.015 * SAMPLE_RATE));
+            double release = Math.min(1.0, (length - 1 - i) / (0.020 * SAMPLE_RATE));
+            audio[i] = (float) (attack * release * alternatingGain * (
+                    0.65 * Math.sin(phase)
+                            + 0.23 * Math.sin(2.0 * phase)
+                            + 0.12 * Math.sin(3.0 * phase)));
         }
         return audio;
     }
