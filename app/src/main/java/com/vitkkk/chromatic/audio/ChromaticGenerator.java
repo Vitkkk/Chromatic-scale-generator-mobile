@@ -55,11 +55,11 @@ public final class ChromaticGenerator {
 
     private static final class SourceSample {
         final float[] audio;
-        final double fundamental;
+        final int sampleRate;
 
-        SourceSample(float[] audio, double fundamental) {
+        SourceSample(float[] audio, int sampleRate) {
             this.audio = audio;
-            this.fundamental = fundamental;
+            this.sampleRate = sampleRate;
         }
     }
 
@@ -74,7 +74,7 @@ public final class ChromaticGenerator {
                                   Config config, ProgressListener listener) throws Exception {
         validate(config);
         if (!NativePitchShifter.isAvailable()) {
-            throw new IOException("O motor Rubber Band R3 não está disponível nesta instalação.");
+            throw new IOException("O motor Praat 6.1.38 não está disponível nesta instalação.");
         }
 
         DocumentFile folder = DocumentFile.fromTreeUri(context, folderUri);
@@ -100,19 +100,14 @@ public final class ChromaticGenerator {
 
         SourceSample[] sources = new SourceSample[sampleCount];
         for (int i = 0; i < sampleCount; i++) {
-            int percent = (int) Math.round((i / (double) sampleCount) * 20.0);
-            progress(listener, percent, "Detectando o pitch do sample " + (i + 1)
-                    + " de " + sampleCount + "…");
+            int percent = (int) Math.round((i / (double) sampleCount) * 15.0);
+            progress(listener, percent, "Carregando sample " + (i + 1)
+                    + " de " + sampleCount + " sem alterar o áudio…");
             DocumentFile file = files.get((i + 1) + ".wav");
             WavIO.WavData wav = WavIO.read(resolver, file.getUri());
-            float[] resampled = WavIO.resampleLinear(wav.samples, wav.sampleRate, OUTPUT_SAMPLE_RATE);
-            float[] trimmed = WavIO.trimSilence(resampled, 0.0025f, OUTPUT_SAMPLE_RATE / 200);
-            double fundamental = PitchDetector.detectFundamental(trimmed, OUTPUT_SAMPLE_RATE);
-            if (!Double.isFinite(fundamental)) {
-                throw new IOException("Não consegui detectar o pitch de " + (i + 1)
-                        + ".wav. Use um sample vocal limpo, sem silêncio longo ou instrumental.");
-            }
-            sources[i] = new SourceSample(trimmed, fundamental);
+            // The desktop sends the full WAV to Praat. Do not trim silence and do not
+            // run a separate F0 detector before To Manipulation.
+            sources[i] = new SourceSample(wav.samples, wav.sampleRate);
         }
 
         int noteLength = msToSamples(config.noteDurationMs);
@@ -139,23 +134,26 @@ public final class ChromaticGenerator {
 
         int cursor = 0;
         for (int note = 0; note < config.noteCount; note++) {
-            int percent = 20 + (int) Math.round((note / (double) config.noteCount) * 73.0);
+            int percent = 15 + (int) Math.round((note / (double) config.noteCount) * 78.0);
             progress(listener, percent, (config.dynamicPitchAttack
-                    ? "Aplicando glide nativo na nota " : "Processando em alta qualidade a nota ")
+                    ? "Editando PitchTier dinâmico no Praat: nota "
+                    : "Ressintetizando com Praat 6.1.38: nota ")
                     + (note + 1) + " de " + config.noteCount + "…");
 
             SourceSample source = sources[note % sampleCount];
             int absoluteSemitone = config.startNote + note;
             int octave = config.startOctave + Math.floorDiv(absoluteSemitone, 12);
             int noteInOctave = Math.floorMod(absoluteSemitone, 12);
-            int midi = 12 * (octave + 1) + noteInOctave;
-            double targetFrequency = 440.0 * Math.pow(2.0, (midi - 69) / 12.0);
+
+            // Use the exact frequency formula from chromatic_gen.py on Windows.
+            int desktopStartingKey = config.startNote + 12 * (config.startOctave - 2);
+            double targetFrequency = 32.703
+                    * Math.pow(2.0, (note + desktopStartingKey + 12) / 12.0);
 
             float[] pitched = NativePitchShifter.shift(
                     source.audio,
-                    source.fundamental,
+                    source.sampleRate,
                     targetFrequency,
-                    OUTPUT_SAMPLE_RATE,
                     noteLength,
                     dynamicHoldSamples,
                     dynamicGlideSamples);
@@ -178,7 +176,7 @@ public final class ChromaticGenerator {
         String outputName = sanitizeFileName(config.outputFileName);
         DocumentFile output = replaceFile(folder, outputName);
         WavIO.write(resolver, output.getUri(), chromatic, OUTPUT_SAMPLE_RATE);
-        progress(listener, 100, "Concluído.");
+        progress(listener, 100, "Concluído com o motor original do desktop.");
 
         return new Result(output.getUri(), sampleCount, config.noteCount,
                 chromatic.length / (double) OUTPUT_SAMPLE_RATE);
@@ -216,7 +214,7 @@ public final class ChromaticGenerator {
         if (config.startNote < 0 || config.startNote > 11) {
             throw new IllegalArgumentException("Nota inicial inválida.");
         }
-        if (config.startOctave < 0 || config.startOctave > 8) {
+        if (config.startOctave < 1 || config.startOctave > 6) {
             throw new IllegalArgumentException("Oitava inicial inválida.");
         }
         if (config.noteCount < 1 || config.noteCount > 120) {
