@@ -54,12 +54,12 @@ public final class ChromaticGenerator {
     }
 
     private static final class SourceSample {
-        final float[] originalAudio;
-        final PitchShifter.Analysis analysis;
+        final float[] audio;
+        final double fundamental;
 
-        SourceSample(float[] originalAudio, PitchShifter.Analysis analysis) {
-            this.originalAudio = originalAudio;
-            this.analysis = analysis;
+        SourceSample(float[] audio, double fundamental) {
+            this.audio = audio;
+            this.fundamental = fundamental;
         }
     }
 
@@ -73,6 +73,10 @@ public final class ChromaticGenerator {
     public static Result generate(Context context, ContentResolver resolver, Uri folderUri,
                                   Config config, ProgressListener listener) throws Exception {
         validate(config);
+        if (!NativePitchShifter.isAvailable()) {
+            throw new IOException("O motor Rubber Band R3 não está disponível nesta instalação.");
+        }
+
         DocumentFile folder = DocumentFile.fromTreeUri(context, folderUri);
         if (folder == null || !folder.exists() || !folder.isDirectory()) {
             throw new IOException("A pasta selecionada não está mais disponível.");
@@ -96,8 +100,8 @@ public final class ChromaticGenerator {
 
         SourceSample[] sources = new SourceSample[sampleCount];
         for (int i = 0; i < sampleCount; i++) {
-            int percent = (int) Math.round((i / (double) sampleCount) * 25.0);
-            progress(listener, percent, "Analisando pitch e pulsos do sample " + (i + 1)
+            int percent = (int) Math.round((i / (double) sampleCount) * 20.0);
+            progress(listener, percent, "Detectando o pitch do sample " + (i + 1)
                     + " de " + sampleCount + "…");
             DocumentFile file = files.get((i + 1) + ".wav");
             WavIO.WavData wav = WavIO.read(resolver, file.getUri());
@@ -108,15 +112,13 @@ public final class ChromaticGenerator {
                 throw new IOException("Não consegui detectar o pitch de " + (i + 1)
                         + ".wav. Use um sample vocal limpo, sem silêncio longo ou instrumental.");
             }
-            PitchShifter.Analysis analysis = PitchShifter.analyze(
-                    trimmed, fundamental, OUTPUT_SAMPLE_RATE);
-            sources[i] = new SourceSample(trimmed, analysis);
+            sources[i] = new SourceSample(trimmed, fundamental);
         }
 
         int noteLength = msToSamples(config.noteDurationMs);
         int gapLength = msToSamples(config.gapMs);
-        int dynamicHoldSamples = msToSamples(config.dynamicHoldMs);
-        int dynamicGlideSamples = msToSamples(config.dynamicGlideMs);
+        int dynamicHoldSamples = config.dynamicPitchAttack ? msToSamples(config.dynamicHoldMs) : 0;
+        int dynamicGlideSamples = config.dynamicPitchAttack ? msToSamples(config.dynamicGlideMs) : 0;
         long totalLong = (long) config.noteCount * noteLength
                 + (long) Math.max(0, config.noteCount - 1) * gapLength;
         if (totalLong > Integer.MAX_VALUE) {
@@ -137,9 +139,9 @@ public final class ChromaticGenerator {
 
         int cursor = 0;
         for (int note = 0; note < config.noteCount; note++) {
-            int percent = 25 + (int) Math.round((note / (double) config.noteCount) * 68.0);
+            int percent = 20 + (int) Math.round((note / (double) config.noteCount) * 73.0);
             progress(listener, percent, (config.dynamicPitchAttack
-                    ? "Criando ataque dinâmico da nota " : "Ressintetizando nota ")
+                    ? "Aplicando glide nativo na nota " : "Processando em alta qualidade a nota ")
                     + (note + 1) + " de " + config.noteCount + "…");
 
             SourceSample source = sources[note % sampleCount];
@@ -149,12 +151,14 @@ public final class ChromaticGenerator {
             int midi = 12 * (octave + 1) + noteInOctave;
             double targetFrequency = 440.0 * Math.pow(2.0, (midi - 69) / 12.0);
 
-            float[] pitched = PitchShifter.shift(source.analysis, targetFrequency, noteLength);
-            if (config.dynamicPitchAttack) {
-                float[] original = DynamicPitchAttack.timeMapLinear(source.originalAudio, noteLength);
-                pitched = DynamicPitchAttack.apply(original, pitched,
-                        dynamicHoldSamples, dynamicGlideSamples);
-            }
+            float[] pitched = NativePitchShifter.shift(
+                    source.audio,
+                    source.fundamental,
+                    targetFrequency,
+                    OUTPUT_SAMPLE_RATE,
+                    noteLength,
+                    dynamicHoldSamples,
+                    dynamicGlideSamples);
             applyFade(pitched, msToSamples(config.fadeMs));
             if (config.normalize) normalize(pitched, 0.94f);
 
