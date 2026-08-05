@@ -40,6 +40,15 @@ target_compile_options(
         -ffast-math
 )
 
+# Android 15 can run on devices using 16 KB memory pages. NDK r27 needs these
+# explicit linker flags so the ELF LOAD segments work on both 4 KB and 16 KB.
+target_link_options(
+        chromatic_pitch
+        PRIVATE
+        "-Wl,-z,max-page-size=16384"
+        "-Wl,-z,common-page-size=16384"
+)
+
 target_link_libraries(
         chromatic_pitch
         android
