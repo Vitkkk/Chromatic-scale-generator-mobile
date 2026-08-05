@@ -11,19 +11,29 @@ Port Android do **Chromatic Scale Generator** para criação de chromatics de FN
 5. Toque em **Gerar chromatic.wav**.
 6. Depois da geração, ouça o resultado ou toque em **Criar DirectWave (.dwp)**.
 
-O aplicativo analisa pitch e pulsos da voz, afina cada nota por ressíntese pitch-synchronous, mantém uma duração configurável e gera WAV mono PCM 16-bit em 48 kHz. Opcionalmente, também cria a pasta `pitched_samples` com cada nota separada.
+## Motor de pitch — versão 0.8
 
-## Ataque dinâmico — versão 0.6
+A geração das notas usa o **Rubber Band Library 4.0.0**, compilado nativamente no APK pelo Android NDK.
 
-A opção **Ataque dinâmico: pitch original → nota** preserva o começo natural do sample antes de entrar na afinação final.
+- Motor R3/Finer em processamento offline para as notas estáticas.
+- Preservação de formantes para manter a identidade vocal.
+- Pitch e mudança de duração são processados juntos pelo mesmo motor.
+- Não existe mistura do áudio original dentro da vogal afinada.
+- O antigo PSOLA Java não participa mais da geração final.
+- Bibliotecas incluídas para `arm64-v8a`, `armeabi-v7a` e `x86_64`.
+- Segmentos ELF alinhados para páginas de memória de 16 KB.
 
-- **Pitch original (ms):** tempo em que o começo do sample permanece sem mudança de pitch.
-- **Transição (ms):** crossfade suave do ataque original para a ressíntese afinada.
+Essa troca foi feita para eliminar period doubling, sub-harmônicos fantasmas e quedas instáveis de pitch que ainda podiam aparecer no motor artesanal.
+
+## Ataque dinâmico
+
+A opção **Ataque dinâmico: pitch original → nota** agora usa uma mudança contínua de pitch dentro do próprio motor nativo.
+
+- **Pitch original (ms):** tempo inicial em escala 1×.
+- **Transição (ms):** glide suave e logarítmico até a nota final.
 - Valores padrão: 20 ms de pitch original e 45 ms de transição.
-- A opção fica desligada por padrão; assim o comportamento estático da versão 0.5 continua disponível.
-- Quando a nota é muito curta, os tempos são reduzidos automaticamente para que o fim sempre chegue à nota correta.
-
-O efeito reproduz de forma controlável a sensação do ataque preservado que aparece na versão de PC com Praat: consoantes e o início vocal mantêm mais da identidade original, enquanto o corpo da nota fica afinado.
+- Não é mais feito crossfade entre duas waveforms com pitches diferentes.
+- A opção continua desligada por padrão.
 
 ## DirectWave monolítico
 
@@ -38,14 +48,12 @@ O efeito reproduz de forma controlável a sensação do ataque preservado que ap
 - Android 8.0+.
 - Seleção de pasta pelo Storage Access Framework.
 - Detecção automática de `1.wav`, `2.wav`, `3.wav`…
-- Pitch local e pulsos alinhados por correlação, inspirados no pipeline de Manipulation/overlap-add do Praat.
-- Regiões voiced/unvoiced e consoantes preservadas.
-- Ataque dinâmico opcional.
+- WAV mono PCM 16-bit em 48 kHz.
 - Fade, normalização e duração configuráveis.
 - Exportação de samples afinados individuais.
 - Prévia do WAV dentro do aplicativo.
 - Exportação DirectWave monolítica, ranges MIDI estendidos e loop opcional.
-- Processamento totalmente offline, sem servidor e sem API.
+- Processamento totalmente local, sem servidor e sem API.
 
 ## Como baixar o APK pelo GitHub
 
@@ -56,7 +64,7 @@ O efeito reproduz de forma controlável a sensação do ataque preservado que ap
 
 ## Build local
 
-Requer Java 17, Android SDK 35 e Gradle 8.10.2.
+Requer Java 17, Android SDK 35, Android NDK 27.2.12479018, CMake 3.22.1 e Gradle 8.10.2. A configuração baixa a fonte oficial fixada do Rubber Band 4.0.0 durante o primeiro build.
 
 ```bash
 gradle assembleDebug
@@ -70,4 +78,4 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ## Licença
 
-GPL-3.0. O aplicativo original também foi distribuído sob GPL-3.0.
+GPL-3.0. O aplicativo original também foi distribuído sob GPL-3.0. O Rubber Band Library é distribuído sob GPL-2.0-or-later; consulte `THIRD_PARTY_NOTICES.md`.
