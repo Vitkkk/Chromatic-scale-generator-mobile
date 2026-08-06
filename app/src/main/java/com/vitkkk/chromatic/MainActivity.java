@@ -65,6 +65,7 @@ public class MainActivity extends AppCompatActivity {
     private Uri folderUri;
     private Uri generatedUri;
     private ChromaticGenerator.Config generatedConfig;
+    private ChromaticGenerator.Result generatedResult;
     private MediaPlayer mediaPlayer;
     private boolean busy;
 
@@ -157,6 +158,7 @@ public class MainActivity extends AppCompatActivity {
         stopPreview();
         generatedUri = null;
         generatedConfig = null;
+        generatedResult = null;
         previewButton.setEnabled(false);
         dwpButton.setEnabled(false);
         updateDwpControls();
@@ -217,12 +219,16 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     generatedUri = result.outputUri;
                     generatedConfig = config;
+                    generatedResult = result;
                     prepareDwpDefaults(config);
                     setBusy(false);
                     String dynamicText = config.dynamicPitchAttack ? " Ataque dinâmico aplicado." : "";
+                    String durationText = config.noteDurationMs == 0
+                            ? " Duração natural do PC." : " Duração personalizada aplicada depois do Praat.";
                     statusText.setText(String.format(Locale.getDefault(),
-                            "Pronto: %d notas, %d samples, %.2f s.%s Agora você pode ouvir ou criar o DWP.",
-                            result.noteCount, result.sampleCount, result.durationSeconds, dynamicText));
+                            "Pronto: %d notas, %d samples, %.2f s.%s%s Agora você pode ouvir ou criar o DWP.",
+                            result.noteCount, result.sampleCount, result.durationSeconds,
+                            durationText, dynamicText));
                     Toast.makeText(this, "Chromatic gerada com sucesso!",
                             Toast.LENGTH_LONG).show();
                 });
@@ -253,7 +259,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startDwpExport() {
-        if (generatedUri == null || generatedConfig == null) {
+        if (generatedUri == null || generatedConfig == null || generatedResult == null) {
             showError("Gere uma chromatic antes de criar o DWP.");
             return;
         }
@@ -297,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
                 DwpExporter.Result result = DwpExporter.export(
                         this, getContentResolver(), folderUri, generatedUri, outputName,
                         startMidi, generatedConfig.noteCount,
-                        generatedConfig.noteDurationMs, generatedConfig.gapMs,
+                        generatedResult.noteOffsets, generatedResult.noteLengths,
                         firstNote, lastNote,
                         loopEnabled, loopStartPercent, loopEndPercent,
                         (percent, message) -> runOnUiThread(() -> {
@@ -402,7 +408,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar.setVisibility(isBusy ? View.VISIBLE : View.GONE);
         selectFolderButton.setEnabled(!isBusy);
         generateButton.setEnabled(!isBusy);
-        boolean hasResult = generatedUri != null && generatedConfig != null;
+        boolean hasResult = generatedUri != null && generatedConfig != null && generatedResult != null;
         previewButton.setEnabled(!isBusy && hasResult);
         dwpButton.setEnabled(!isBusy && hasResult);
         updateGenerationControls();
@@ -417,7 +423,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateDwpControls() {
-        boolean hasResult = generatedUri != null && generatedConfig != null;
+        boolean hasResult = generatedUri != null && generatedConfig != null && generatedResult != null;
         boolean available = !busy && hasResult;
         dwpEntireSwitch.setEnabled(available);
         dwpFileNameInput.setEnabled(available);
