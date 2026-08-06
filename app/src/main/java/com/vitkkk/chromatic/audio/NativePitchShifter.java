@@ -30,7 +30,6 @@ public final class NativePitchShifter {
     public static float[] shift(float[] input,
                                 int sourceSampleRate,
                                 double targetFrequency,
-                                int targetLength,
                                 int dynamicHoldSamples,
                                 int dynamicGlideSamples) {
         if (!AVAILABLE) {
@@ -43,14 +42,14 @@ public final class NativePitchShifter {
         if (!Double.isFinite(targetFrequency) || targetFrequency <= 0.0) {
             throw new IllegalArgumentException("Frequência de destino inválida.");
         }
-        if (sourceSampleRate < 8000 || sourceSampleRate > 192000 || targetLength <= 0) {
-            throw new IllegalArgumentException("Sample rate ou duração inválida.");
+        if (sourceSampleRate < 8000 || sourceSampleRate > 192000) {
+            throw new IllegalArgumentException("Sample rate inválido.");
         }
 
-        float[] result = nativeShift(input, sourceSampleRate, targetFrequency, targetLength,
+        float[] result = nativeShift(input, sourceSampleRate, targetFrequency,
                 Math.max(0, dynamicHoldSamples), Math.max(0, dynamicGlideSamples));
-        if (result == null || result.length != targetLength) {
-            throw new IllegalStateException("O motor Praat retornou uma duração inválida.");
+        if (result == null || result.length == 0) {
+            throw new IllegalStateException("O motor Praat retornou um sample vazio.");
         }
         for (int i = 0; i < result.length; i++) {
             if (!Float.isFinite(result[i])) result[i] = 0.0f;
@@ -61,7 +60,6 @@ public final class NativePitchShifter {
     private static native float[] nativeShift(float[] input,
                                                int sourceSampleRate,
                                                double targetFrequency,
-                                               int targetLength,
                                                int holdSamples,
                                                int glideSamples);
 }
