@@ -7,9 +7,10 @@ Port Android do **Chromatic Scale Generator** para criação de chromatics de FN
 1. Crie uma pasta no celular.
 2. Coloque os samples WAV nela com nomes sequenciais: `1.wav`, `2.wav`, `3.wav`… sem pular números.
 3. Abra o aplicativo e selecione essa pasta.
-4. Escolha a nota inicial, oitava, quantidade de notas, espaço da nota, gap e demais opções.
-5. Toque em **Gerar chromatic.wav**.
-6. Depois da geração, ouça o resultado ou toque em **Criar DirectWave (.dwp)**.
+4. Escolha a nota inicial, oitava, quantidade de notas, duração, gap e demais opções.
+5. Para reproduzir o comportamento do PC, mantenha **Duração da nota = 0**, fade 0, normalização desligada e ataque dinâmico desligado.
+6. Toque em **Gerar chromatic.wav**.
+7. Depois da geração, ouça o resultado ou toque em **Criar DirectWave (.dwp)**.
 
 ## Motor de pitch — versão 0.9
 
@@ -25,18 +26,18 @@ O caminho estático reproduz o `chromatic_gen.py` original:
 6. Aplica a mesma fórmula de frequência do aplicativo de PC a todos os pontos vozeados.
 7. Recoloca o `PitchTier` na `Manipulation`.
 8. Executa uma única ressíntese `overlap-add`.
+9. Mantém a duração natural devolvida pelo Praat.
 
 Não há Rubber Band, PSOLA Java, `DurationTier`, múltiplas passagens, crossfade entre pitches nem mistura do WAV original no resultado estático.
 
-### Espaço da nota
+### Duração da nota
 
-O programa de PC mantém a duração natural de cada sample ressintetizado e apenas concatena o gap. Para preservar DWP, loop e a grade fixa da interface mobile, o campo de duração agora funciona como **espaço reservado**:
+- **0 ms:** modo fiel ao PC. Cada nota mantém exatamente a duração natural retornada pelo Praat.
+- **40–10000 ms:** extensão opcional mobile aplicada somente depois da ressíntese original.
+- Ao encurtar, o final é cortado.
+- Ao alongar, o aplicativo usa uma região de sustain com loop e crossfade, preservando a frequência já gerada pelo Praat em vez de analisar ou mudar o pitch outra vez.
 
-- se o resultado do Praat for menor, o restante recebe silêncio;
-- se for maior, o final é cortado;
-- o áudio nunca é esticado novamente para preencher esse espaço.
-
-Isso evita introduzir uma segunda transformação de pitch/duração depois do motor original.
+O padrão é **0 ms**. Assim, o alongador opcional não participa do teste de estabilidade e tonalidade do motor original.
 
 ## Ataque dinâmico
 
@@ -51,6 +52,7 @@ A opção **Ataque dinâmico: pitch original → nota** continua disponível com
 ## DirectWave monolítico
 
 - Exportação da chromatic inteira ou de um trecho escolhido por índice.
+- O exportador usa o offset e a duração reais de cada nota, inclusive no modo de duração natural variável.
 - Cada zona contém PCM 16-bit embutido no próprio `.dwp`.
 - A primeira zona se estende até MIDI 0 e a última até MIDI 127.
 - Notas fora do range reutilizam a amostra de borda com pitch normal do DirectWave.
@@ -63,7 +65,8 @@ A opção **Ataque dinâmico: pitch original → nota** continua disponível com
 - Detecção automática de `1.wav`, `2.wav`, `3.wav`…
 - WAV mono PCM 16-bit em 48 kHz.
 - Motor Praat/Parselmouth do aplicativo original.
-- Fade, normalização e espaço de nota configuráveis.
+- Duração natural por padrão e alongamento opcional separado.
+- Fade e normalização opcionais, ambos desativados por padrão.
 - Exportação de samples afinados individuais.
 - Prévia do WAV dentro do aplicativo.
 - Exportação DirectWave monolítica, ranges MIDI estendidos e loop opcional.
