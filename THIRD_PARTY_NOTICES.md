@@ -18,7 +18,7 @@ The Android UI does not bundle Python or wxPython. The native audio library call
 
 ## Parselmouth and Praat
 
-Version 0.9 builds from the official **Parselmouth 0.4.1** source tag, which contains **Praat 6.1.38**.
+Version 0.10 builds from the official **Parselmouth 0.4.1** source tag, which contains **Praat 6.1.38**.
 
 - Parselmouth project: Yannick Jadoul and contributors
 - Source tag: `v0.4.1`
