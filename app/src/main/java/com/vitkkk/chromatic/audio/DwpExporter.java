@@ -42,7 +42,7 @@ public final class DwpExporter {
     public static Result export(Context context, ContentResolver resolver, Uri folderUri,
                                 Uri chromaticUri, String requestedFileName,
                                 int chromaticStartMidi, int chromaticNoteCount,
-                                int noteDurationMs, int gapMs,
+                                int[] noteOffsets, int[] noteLengths,
                                 int firstNote, int lastNote,
                                 boolean loopEnabled, int loopStartPercent, int loopEndPercent,
                                 ProgressListener listener) throws Exception {
@@ -50,6 +50,11 @@ public final class DwpExporter {
         if (firstNote < 1 || lastNote < firstNote || lastNote > chromaticNoteCount) {
             throw new IllegalArgumentException("O intervalo do DWP deve ficar entre 1 e "
                     + chromaticNoteCount + ".");
+        }
+        if (noteOffsets == null || noteLengths == null
+                || noteOffsets.length < chromaticNoteCount
+                || noteLengths.length < chromaticNoteCount) {
+            throw new IllegalArgumentException("Os limites reais das notas não estão disponíveis.");
         }
         validateLoop(loopEnabled, loopStartPercent, loopEndPercent);
 
@@ -59,25 +64,18 @@ public final class DwpExporter {
             throw new IllegalArgumentException("O intervalo escolhido ultrapassa as notas MIDI 0–127.");
         }
 
-        progress(listener, 5, "Lendo a chromatic gerada…");
+        progress(listener, 5, "Lendo a chromatic e seus limites reais…");
         WavIO.WavData wav = WavIO.read(resolver, chromaticUri);
-        int noteLength = (int) Math.round(noteDurationMs * wav.sampleRate / 1000.0);
-        int gapLength = (int) Math.round(gapMs * wav.sampleRate / 1000.0);
-        if (noteLength <= 0) throw new IOException("A duração das notas do WAV é inválida.");
-
-        long expected = (long) chromaticNoteCount * noteLength
-                + (long) Math.max(0, chromaticNoteCount - 1) * gapLength;
-        if (wav.samples.length < expected) {
-            throw new IOException("O WAV gerado está menor que a configuração usada para criá-lo.");
-        }
 
         String fileName = sanitizeFileName(requestedFileName);
         String programName = fileName.substring(0, fileName.length() - 4);
         List<DwpWriter.Zone> zones = new ArrayList<>();
         for (int note = firstNote - 1; note < lastNote; note++) {
-            int offset = note * (noteLength + gapLength);
-            if (offset < 0 || offset + noteLength > wav.samples.length) {
-                throw new IOException("Não foi possível localizar a nota " + (note + 1) + " dentro do WAV.");
+            int offset = noteOffsets[note];
+            int noteLength = noteLengths[note];
+            if (offset < 0 || noteLength <= 0 || offset + noteLength > wav.samples.length) {
+                throw new IOException("Não foi possível localizar a nota " + (note + 1)
+                        + " dentro do WAV gerado.");
             }
             int midi = chromaticStartMidi + note;
             if (loopEnabled) {
