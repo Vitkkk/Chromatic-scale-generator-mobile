@@ -104,14 +104,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:hint="Espaço de cada nota (ms; não estica o sample)">
+            android:hint="Duração da nota (0 = duração natural do PC)">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/noteDurationInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="number"
-                android:text="350" />
+                android:text="0" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
