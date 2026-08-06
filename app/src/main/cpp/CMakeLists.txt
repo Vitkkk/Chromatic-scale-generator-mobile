@@ -19,17 +19,21 @@ if (NOT parselmouth_source_POPULATED)
     FetchContent_Populate(parselmouth_source)
 endif ()
 
-# Do not add Parselmouth's top-level `extern` directory: that wrapper is for
-# the Python extension and searches for a system GSL. Praat's own CMake tree
-# builds the exact vendored GSL, CLAPACK, GLPK and other dependencies used by
-# the desktop binary.
+# Praat's CMake target expects fmt::fmt. Add only Parselmouth's pinned fmt
+# submodule; all numerical/audio dependencies continue to come from Praat's
+# own `praat/external` tree.
+add_subdirectory(
+        ${parselmouth_source_SOURCE_DIR}/extern/fmt
+        ${CMAKE_CURRENT_BINARY_DIR}/parselmouth-fmt
+        EXCLUDE_FROM_ALL
+)
 add_subdirectory(
         ${parselmouth_source_SOURCE_DIR}/praat
         ${CMAKE_CURRENT_BINARY_DIR}/parselmouth-praat
         EXCLUDE_FROM_ALL
 )
 
-set_target_properties(praat PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+set_target_properties(praat fmt PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
 add_library(
         chromatic_pitch
