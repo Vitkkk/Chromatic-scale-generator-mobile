@@ -78,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         bindViews();
         configureSpinners();
+        if (savedInstanceState == null) applyDesktopDefaults();
 
         selectFolderButton.setOnClickListener(view -> folderPicker.launch(folderUri));
         generateButton.setOnClickListener(view -> startGeneration());
@@ -137,6 +138,12 @@ public class MainActivity extends AppCompatActivity {
                 android.R.layout.simple_spinner_dropdown_item, octaves));
         startNoteSpinner.setSelection(0);
         startOctaveSpinner.setSelection(1);
+    }
+
+    private void applyDesktopDefaults() {
+        noteDurationInput.setText("0");
+        fadeInput.setText("0");
+        normalizeSwitch.setChecked(false);
     }
 
     private void onFolderSelected(Uri uri) {
