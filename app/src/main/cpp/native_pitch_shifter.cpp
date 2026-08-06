@@ -24,8 +24,8 @@ std::once_flag gPraatInit;
 
 void initialisePraat() {
     std::call_once(gPraatInit, [] {
-        // This is the same initialization sequence used by Parselmouth 0.4.1
-        // before exposing any Praat command to Python.
+        // Same initialization sequence used by Parselmouth 0.4.1 before it
+        // exposes the Praat commands to Python.
         praatlib_init();
         extern void praat_uvafon_init();
         praat_uvafon_init();
@@ -59,12 +59,10 @@ autoSound prepareExactlyLikeDesktop(const std::vector<float> &input, int sampleR
 }
 
 void applyDesktopFormula(PitchTier pitchTier, double targetFrequency) {
-    // chromatic_gen.py executes Formula on the extracted PitchTier. Formula
-    // replaces the value of every existing voiced point; it does not create a
-    // pitch track in unvoiced regions.
+    // Praat's Formula command replaces every existing voiced PitchTier point.
+    // It intentionally does not invent pitch points in unvoiced regions.
     for (integer i = 1; i <= pitchTier->points.size; ++i) {
-        RealPoint point = pitchTier->points.at[i];
-        point->value = targetFrequency;
+        pitchTier->points.at[i]->value = targetFrequency;
     }
 }
 
@@ -72,8 +70,8 @@ void applyDynamicFormula(PitchTier pitchTier,
                          double targetFrequency,
                          double holdSeconds,
                          double glideSeconds) {
-    // Mobile-only extension. It edits the same Praat PitchTier rather than
-    // crossfading two waveforms, so only one resynthesis is ever audible.
+    // Mobile-only extension, applied inside the same Praat PitchTier. There is
+    // still only one overlap-add resynthesis and no waveform crossfade.
     for (integer i = 1; i <= pitchTier->points.size; ++i) {
         RealPoint point = pitchTier->points.at[i];
         const double relativeTime = point->number - pitchTier->xmin;
@@ -119,15 +117,12 @@ autoSound resynthesizeExactlyLikeDesktop(Sound prepared,
     return Manipulation_to_Sound(manipulation.get(), Manipulation_OVERLAPADD);
 }
 
-std::vector<float> copyIntoConfiguredSlot(Sound sound, std::size_t targetLength) {
-    // The PC generator does not time-stretch samples at all. Preserve the
-    // exact Praat output and only fit it into the mobile app's configured slot:
-    // trim if the slot is shorter, zero-pad if it is longer. No second pitch or
-    // duration algorithm is applied after overlap-add.
-    std::vector<float> output(targetLength, 0.0f);
-    const std::size_t available = static_cast<std::size_t>(std::max<integer>(0, sound->nx));
-    const std::size_t count = std::min(targetLength, available);
-    for (std::size_t i = 0; i < count; ++i) {
+std::vector<float> copyNaturalDuration(Sound sound) {
+    const std::size_t length = static_cast<std::size_t>(std::max<integer>(0, sound->nx));
+    if (length == 0) throw std::runtime_error("O Praat retornou um sample vazio.");
+
+    std::vector<float> output(length);
+    for (std::size_t i = 0; i < length; ++i) {
         const double sample = sound->z[1][static_cast<integer>(i + 1)];
         output[i] = std::isfinite(sample) ? static_cast<float>(sample) : 0.0f;
     }
@@ -143,13 +138,11 @@ Java_com_vitkkk_chromatic_audio_NativePitchShifter_nativeShift(
         jfloatArray inputArray,
         jint sourceSampleRate,
         jdouble targetFrequency,
-        jint targetLength,
         jint holdSamples,
         jint glideSamples) {
     try {
         if (inputArray == nullptr || sourceSampleRate < 8000 || sourceSampleRate > 192000
-                || targetLength <= 0 || !std::isfinite(targetFrequency)
-                || targetFrequency <= 0.0) {
+                || !std::isfinite(targetFrequency) || targetFrequency <= 0.0) {
             throw std::invalid_argument("Parâmetros inválidos para o motor Praat.");
         }
 
@@ -166,12 +159,15 @@ Java_com_vitkkk_chromatic_audio_NativePitchShifter_nativeShift(
         const double glideSeconds = std::max(0, glideSamples) / kDesktopSampleRate;
         autoSound processed = resynthesizeExactlyLikeDesktop(
                 prepared.get(), targetFrequency, holdSeconds, glideSeconds);
-        std::vector<float> output = copyIntoConfiguredSlot(
-                processed.get(), static_cast<std::size_t>(targetLength));
+        std::vector<float> output = copyNaturalDuration(processed.get());
 
-        jfloatArray result = env->NewFloatArray(targetLength);
+        if (output.size() > static_cast<std::size_t>(std::numeric_limits<jsize>::max())) {
+            throw std::runtime_error("O sample resultante ficou grande demais.");
+        }
+        const jsize outputLength = static_cast<jsize>(output.size());
+        jfloatArray result = env->NewFloatArray(outputLength);
         if (result == nullptr) throw std::runtime_error("Sem memória para criar o áudio final.");
-        env->SetFloatArrayRegion(result, 0, targetLength, output.data());
+        env->SetFloatArrayRegion(result, 0, outputLength, output.data());
         return result;
     } catch (MelderError &) {
         Melder_clearError();
