@@ -14,6 +14,11 @@
 #include "Sound.h"
 #include "praat.h"
 
+// Parselmouth calls this global initializer through INCLUDE_LIBRARY.
+// Declare it outside the anonymous namespace so the linker resolves the
+// upstream Praat symbol rather than looking for a private namespaced copy.
+extern void praat_uvafon_init();
+
 namespace {
 
 constexpr double kDesktopSampleRate = 48000.0;
@@ -28,7 +33,6 @@ void initialisePraat() {
         // Same initialization sequence used by Parselmouth 0.4.1 before it
         // exposes the Praat commands to Python.
         praatlib_init();
-        extern void praat_uvafon_init();
         praat_uvafon_init();
         praat_testPlatformAssumptions();
     });
