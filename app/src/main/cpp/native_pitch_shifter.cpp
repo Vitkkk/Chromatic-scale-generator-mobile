@@ -11,7 +11,7 @@
 #include "PitchTier.h"
 #include "RealTier.h"
 #include "Sound.h"
-#include "melder.h"
+#include "praat.h"
 
 namespace {
 
@@ -24,9 +24,12 @@ std::once_flag gPraatInit;
 
 void initialisePraat() {
     std::call_once(gPraatInit, [] {
-        Melder_init();
-        Melder_batch = true;
-        Melder_backgrounding = true;
+        // This is the same initialization sequence used by Parselmouth 0.4.1
+        // before exposing any Praat command to Python.
+        praatlib_init();
+        extern void praat_uvafon_init();
+        praat_uvafon_init();
+        praat_testPlatformAssumptions();
     });
 }
 
