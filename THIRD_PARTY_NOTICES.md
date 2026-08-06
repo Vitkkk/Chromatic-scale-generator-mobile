@@ -2,21 +2,32 @@
 
 ## Original Windows project
 
-This Android application is a port inspired by the GPL-3.0 Windows project supplied with the development request.
+This Android application is a GPL-3.0 port of the original **Chromatic Scale Generator** desktop project recovered from its distributed source package.
 
-The original program uses Python, wxPython and Praat through `praat-parselmouth`. Its pitch path is `To Manipulation`, pitch-tier replacement and overlap-add resynthesis. Praat, Parselmouth and wxPython are not bundled in this Android application.
+The original program is written in Python with wxPython and uses Praat through `praat-parselmouth`. Its pitch path is:
 
-## Rubber Band Library
+- resample to 48 kHz;
+- convert to mono;
+- `To Manipulation` with `0.05`, `60`, `600`;
+- extract the PitchTier;
+- apply the target-frequency formula;
+- replace the PitchTier;
+- overlap-add resynthesis.
 
-Version 0.8 builds and links **Rubber Band Library 4.0.0** from the official Breakfast Quay source repository.
+The Android UI does not bundle Python or wxPython. The native audio library calls the corresponding Praat C/C++ functions directly.
 
-- Project: Rubber Band Library
-- Copyright: 2007–2024 Particular Programs Ltd. t/a Breakfast Quay
-- Licence: GNU General Public License, version 2 or any later version
-- Source tag: `v4.0.0`
-- Integration: the official `single/RubberBandSingle.cpp` compilation unit is compiled into `libchromatic_pitch.so` using the Android NDK.
+## Parselmouth and Praat
 
-The CMake configuration in this repository pins the upstream version and provides the complete build recipe. The application uses the R3/Finer engine, offline high-quality pitch processing, formant preservation and high-consistency dynamic pitch processing.
+Version 0.9 builds from the official **Parselmouth 0.4.1** source tag, which contains **Praat 6.1.38**.
+
+- Parselmouth project: Yannick Jadoul and contributors
+- Source tag: `v0.4.1`
+- Praat authors: Paul Boersma and David Weenink
+- Parselmouth licence: GNU General Public License, version 3 or later
+- Praat licence: GNU General Public License, version 2 or later
+- Integration: Praat is compiled by the Android NDK into `libchromatic_pitch.so`
+
+The Android build excludes only the unused desktop `sendpraat` IPC helper because it depends on X11 and is unrelated to Sound, Manipulation, PitchTier or resynthesis. The phonetics and audio engine used by the original application remains the upstream Praat implementation.
 
 ## DirectWave format
 
