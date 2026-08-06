@@ -19,20 +19,17 @@ if (NOT parselmouth_source_POPULATED)
     FetchContent_Populate(parselmouth_source)
 endif ()
 
-# Parselmouth's top-level CMake also builds Python bindings. Android only needs
-# its vendored fmt dependency and the native Praat library.
-add_subdirectory(
-        ${parselmouth_source_SOURCE_DIR}/extern
-        ${CMAKE_CURRENT_BINARY_DIR}/parselmouth-extern
-        EXCLUDE_FROM_ALL
-)
+# Do not add Parselmouth's top-level `extern` directory: that wrapper is for
+# the Python extension and searches for a system GSL. Praat's own CMake tree
+# builds the exact vendored GSL, CLAPACK, GLPK and other dependencies used by
+# the desktop binary.
 add_subdirectory(
         ${parselmouth_source_SOURCE_DIR}/praat
         ${CMAKE_CURRENT_BINARY_DIR}/parselmouth-praat
         EXCLUDE_FROM_ALL
 )
 
-set_target_properties(praat fmt PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+set_target_properties(praat PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
 add_library(
         chromatic_pitch
