@@ -14,8 +14,10 @@ android {
         versionCode = 9
         versionName = "0.9.0"
 
+        // The v0.9 exact-Praat validation APK targets the user's ARM64 phone.
+        // Restoring the other ABIs later does not change the audio engine.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
 
         externalNativeBuild {
