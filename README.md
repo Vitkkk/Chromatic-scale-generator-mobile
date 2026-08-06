@@ -7,32 +7,45 @@ Port Android do **Chromatic Scale Generator** para criação de chromatics de FN
 1. Crie uma pasta no celular.
 2. Coloque os samples WAV nela com nomes sequenciais: `1.wav`, `2.wav`, `3.wav`… sem pular números.
 3. Abra o aplicativo e selecione essa pasta.
-4. Escolha a nota inicial, oitava, quantidade de notas, duração, gap e demais opções.
+4. Escolha a nota inicial, oitava, quantidade de notas, espaço da nota, gap e demais opções.
 5. Toque em **Gerar chromatic.wav**.
 6. Depois da geração, ouça o resultado ou toque em **Criar DirectWave (.dwp)**.
 
-## Motor de pitch — versão 0.8
+## Motor de pitch — versão 0.9
 
-A geração das notas usa o **Rubber Band Library 4.0.0**, compilado nativamente no APK pelo Android NDK.
+A versão de PC usa `praat-parselmouth`. O aplicativo Android agora compila nativamente a mesma geração do motor usada pelo programa original: **Parselmouth 0.4.1 / Praat 6.1.38**.
 
-- Motor R3/Finer em processamento offline para as notas estáticas.
-- Preservação de formantes para manter a identidade vocal.
-- Pitch e mudança de duração são processados juntos pelo mesmo motor.
-- Não existe mistura do áudio original dentro da vogal afinada.
-- O antigo PSOLA Java não participa mais da geração final.
-- Bibliotecas incluídas para `arm64-v8a`, `armeabi-v7a` e `x86_64`.
-- Segmentos ELF alinhados para páginas de memória de 16 KB.
+O caminho estático reproduz o `chromatic_gen.py` original:
 
-Essa troca foi feita para eliminar period doubling, sub-harmônicos fantasmas e quedas instáveis de pitch que ainda podiam aparecer no motor artesanal.
+1. Carrega o WAV completo, sem detector de F0 externo e sem cortar silêncio.
+2. Reamostra pelo próprio Praat para 48 kHz com precisão 1.
+3. Converte para mono pelo próprio Praat.
+4. Executa `To Manipulation` com `timeStep = 0.05`, pitch mínimo de 60 Hz e máximo de 600 Hz.
+5. Extrai o `PitchTier` criado pelo Praat.
+6. Aplica a mesma fórmula de frequência do aplicativo de PC a todos os pontos vozeados.
+7. Recoloca o `PitchTier` na `Manipulation`.
+8. Executa uma única ressíntese `overlap-add`.
+
+Não há Rubber Band, PSOLA Java, `DurationTier`, múltiplas passagens, crossfade entre pitches nem mistura do WAV original no resultado estático.
+
+### Espaço da nota
+
+O programa de PC mantém a duração natural de cada sample ressintetizado e apenas concatena o gap. Para preservar DWP, loop e a grade fixa da interface mobile, o campo de duração agora funciona como **espaço reservado**:
+
+- se o resultado do Praat for menor, o restante recebe silêncio;
+- se for maior, o final é cortado;
+- o áudio nunca é esticado novamente para preencher esse espaço.
+
+Isso evita introduzir uma segunda transformação de pitch/duração depois do motor original.
 
 ## Ataque dinâmico
 
-A opção **Ataque dinâmico: pitch original → nota** agora usa uma mudança contínua de pitch dentro do próprio motor nativo.
+A opção **Ataque dinâmico: pitch original → nota** continua disponível como extensão mobile.
 
-- **Pitch original (ms):** tempo inicial em escala 1×.
-- **Transição (ms):** glide suave e logarítmico até a nota final.
-- Valores padrão: 20 ms de pitch original e 45 ms de transição.
-- Não é mais feito crossfade entre duas waveforms com pitches diferentes.
+- **Pitch original (ms):** preserva inicialmente os pontos originais do `PitchTier` criado pelo Praat.
+- **Transição (ms):** move esses mesmos pontos suavemente até a frequência final.
+- O áudio passa por uma única ressíntese overlap-add.
+- Não existe crossfade entre duas waveforms nem um segundo motor de pitch.
 - A opção continua desligada por padrão.
 
 ## DirectWave monolítico
@@ -49,7 +62,8 @@ A opção **Ataque dinâmico: pitch original → nota** agora usa uma mudança c
 - Seleção de pasta pelo Storage Access Framework.
 - Detecção automática de `1.wav`, `2.wav`, `3.wav`…
 - WAV mono PCM 16-bit em 48 kHz.
-- Fade, normalização e duração configuráveis.
+- Motor Praat/Parselmouth do aplicativo original.
+- Fade, normalização e espaço de nota configuráveis.
 - Exportação de samples afinados individuais.
 - Prévia do WAV dentro do aplicativo.
 - Exportação DirectWave monolítica, ranges MIDI estendidos e loop opcional.
@@ -64,7 +78,7 @@ A opção **Ataque dinâmico: pitch original → nota** agora usa uma mudança c
 
 ## Build local
 
-Requer Java 17, Android SDK 35, Android NDK 27.2.12479018, CMake 3.22.1 e Gradle 8.10.2. A configuração baixa a fonte oficial fixada do Rubber Band 4.0.0 durante o primeiro build.
+Requer Java 17, Android SDK 35, Android NDK 27.2.12479018, CMake 3.22.1 e Gradle 8.10.2. A configuração baixa a fonte oficial fixada do Parselmouth 0.4.1, incluindo o Praat 6.1.38, durante o primeiro build.
 
 ```bash
 gradle assembleDebug
@@ -78,4 +92,4 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ## Licença
 
-GPL-3.0. O aplicativo original também foi distribuído sob GPL-3.0. O Rubber Band Library é distribuído sob GPL-2.0-or-later; consulte `THIRD_PARTY_NOTICES.md`.
+GPL-3.0. O aplicativo original e o Parselmouth são distribuídos sob GPL; consulte `THIRD_PARTY_NOTICES.md`.
