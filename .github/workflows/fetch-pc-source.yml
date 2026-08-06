@@ -1,0 +1,76 @@
+name: Fetch Original PC Source
+
+on:
+  push:
+    branches: [ "agent/temp-source-link" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Query GameBanana and download original files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original-pc
+          python3 - <<'PY'
+          import json, pathlib, urllib.parse, urllib.request
+          params = urllib.parse.urlencode({
+              "itemtype": "Tool",
+              "itemid": "8906",
+              "fields": "Files().aFiles()",
+              "return_keys": "1",
+          })
+          api = "https://api.gamebanana.com/Core/Item/Data?" + params
+          with urllib.request.urlopen(api, timeout=60) as response:
+              data = json.load(response)
+          pathlib.Path("original-pc/gamebanana-files.json").write_text(
+              json.dumps(data, indent=2), encoding="utf-8")
+          print(json.dumps(data, indent=2))
+
+          values = data.get("Files().aFiles()", data)
+          if isinstance(values, list) and len(values) == 1 and isinstance(values[0], dict):
+              values = values[0]
+          if not isinstance(values, dict):
+              raise RuntimeError(f"Unexpected files response: {type(values)!r}")
+
+          for file_id, meta in values.items():
+              name = None
+              if isinstance(meta, dict):
+                  name = meta.get("_sFile") or meta.get("filename") or meta.get("name")
+              name = name or f"gamebanana-{file_id}.bin"
+              safe = pathlib.Path(name).name
+              url = f"https://gamebanana.com/dl/{file_id}"
+              print(f"Downloading {url} -> {safe}")
+              request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+              with urllib.request.urlopen(request, timeout=180) as response:
+                  pathlib.Path("original-pc", safe).write_bytes(response.read())
+          PY
+
+      - name: List archive contents
+        if: always()
+        shell: bash
+        run: |
+          find original-pc -maxdepth 2 -type f -printf '%p %s bytes\n' || true
+          for f in original-pc/*; do
+            case "$f" in
+              *.zip) unzip -l "$f" > "$f.contents.txt" || true ;;
+              *.7z) 7z l "$f" > "$f.contents.txt" || true ;;
+              *.rar) 7z l "$f" > "$f.contents.txt" || true ;;
+            esac
+          done
+
+      - name: Upload original desktop package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-pc-generator
+          path: original-pc
+          if-no-files-found: error
