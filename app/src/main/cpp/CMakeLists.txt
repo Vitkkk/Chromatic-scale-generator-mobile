@@ -33,6 +33,13 @@ add_subdirectory(
         EXCLUDE_FROM_ALL
 )
 
+# `sendpraat` is a desktop IPC helper that sends commands to a running Praat
+# GUI. It is unrelated to Sound/Manipulation and includes X11 headers on Unix,
+# which do not exist on Android. Keep the rest of the exact Praat target.
+get_target_property(PRAAT_NATIVE_SOURCES praat SOURCES)
+list(FILTER PRAAT_NATIVE_SOURCES EXCLUDE REGEX "(^|/)sendpraat\\.c$")
+set_property(TARGET praat PROPERTY SOURCES "${PRAAT_NATIVE_SOURCES}")
+
 set_target_properties(praat fmt PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
 add_library(
