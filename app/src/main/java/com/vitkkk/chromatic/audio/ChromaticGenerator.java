@@ -28,6 +28,7 @@ public final class ChromaticGenerator {
         public int startNote;
         public int startOctave;
         public int noteCount;
+        /** 0 keeps the natural desktop duration. */
         public int noteDurationMs;
         public int gapMs;
         public int fadeMs;
@@ -44,12 +45,17 @@ public final class ChromaticGenerator {
         public final int sampleCount;
         public final int noteCount;
         public final double durationSeconds;
+        public final int[] noteOffsets;
+        public final int[] noteLengths;
 
-        public Result(Uri outputUri, int sampleCount, int noteCount, double durationSeconds) {
+        public Result(Uri outputUri, int sampleCount, int noteCount, double durationSeconds,
+                      int[] noteOffsets, int[] noteLengths) {
             this.outputUri = outputUri;
             this.sampleCount = sampleCount;
             this.noteCount = noteCount;
             this.durationSeconds = durationSeconds;
+            this.noteOffsets = noteOffsets.clone();
+            this.noteLengths = noteLengths.clone();
         }
     }
 
@@ -105,21 +111,19 @@ public final class ChromaticGenerator {
                     + " de " + sampleCount + " sem alterar o áudio…");
             DocumentFile file = files.get((i + 1) + ".wav");
             WavIO.WavData wav = WavIO.read(resolver, file.getUri());
-            // The desktop sends the full WAV to Praat. Do not trim silence and do not
-            // run a separate F0 detector before To Manipulation.
+            // The desktop sends the complete WAV to Praat: no silence trim and
+            // no external fundamental-frequency detector.
             sources[i] = new SourceSample(wav.samples, wav.sampleRate);
         }
 
-        int noteLength = msToSamples(config.noteDurationMs);
+        int requestedNoteLength = config.noteDurationMs == 0
+                ? 0 : msToSamples(config.noteDurationMs);
         int gapLength = msToSamples(config.gapMs);
         int dynamicHoldSamples = config.dynamicPitchAttack ? msToSamples(config.dynamicHoldMs) : 0;
         int dynamicGlideSamples = config.dynamicPitchAttack ? msToSamples(config.dynamicGlideMs) : 0;
-        long totalLong = (long) config.noteCount * noteLength
-                + (long) Math.max(0, config.noteCount - 1) * gapLength;
-        if (totalLong > Integer.MAX_VALUE) {
-            throw new IOException("A chromatic ficou grande demais para gerar no celular.");
-        }
-        float[] chromatic = new float[(int) totalLong];
+        float[][] pitchedNotes = new float[config.noteCount][];
+        int[] noteOffsets = new int[config.noteCount];
+        int[] noteLengths = new int[config.noteCount];
 
         DocumentFile pitchedFolder = null;
         if (config.dumpSamples) {
@@ -132,12 +136,12 @@ public final class ChromaticGenerator {
             }
         }
 
-        int cursor = 0;
+        long totalLong = 0;
         for (int note = 0; note < config.noteCount; note++) {
-            int percent = 15 + (int) Math.round((note / (double) config.noteCount) * 78.0);
+            int percent = 15 + (int) Math.round((note / (double) config.noteCount) * 76.0);
             progress(listener, percent, (config.dynamicPitchAttack
-                    ? "Editando PitchTier dinâmico no Praat: nota "
-                    : "Ressintetizando com Praat 6.1.38: nota ")
+                    ? "Editando o PitchTier dinâmico do Praat: nota "
+                    : "Ressintetizando com o Praat do PC: nota ")
                     + (note + 1) + " de " + config.noteCount + "…");
 
             SourceSample source = sources[note % sampleCount];
@@ -145,24 +149,33 @@ public final class ChromaticGenerator {
             int octave = config.startOctave + Math.floorDiv(absoluteSemitone, 12);
             int noteInOctave = Math.floorMod(absoluteSemitone, 12);
 
-            // Use the exact frequency formula from chromatic_gen.py on Windows.
+            // Exact formula from chromatic_gen.py.
             int desktopStartingKey = config.startNote + 12 * (config.startOctave - 2);
             double targetFrequency = 32.703
                     * Math.pow(2.0, (note + desktopStartingKey + 12) / 12.0);
 
-            float[] pitched = NativePitchShifter.shift(
+            float[] naturalPraatOutput = NativePitchShifter.shift(
                     source.audio,
                     source.sampleRate,
                     targetFrequency,
-                    noteLength,
                     dynamicHoldSamples,
                     dynamicGlideSamples);
+            float[] pitched = requestedNoteLength == 0
+                    ? naturalPraatOutput
+                    : DurationFitter.fit(naturalPraatOutput, requestedNoteLength, OUTPUT_SAMPLE_RATE);
+
             applyFade(pitched, msToSamples(config.fadeMs));
             if (config.normalize) normalize(pitched, 0.94f);
+            pitchedNotes[note] = pitched;
+            noteLengths[note] = pitched.length;
 
-            System.arraycopy(pitched, 0, chromatic, cursor, pitched.length);
-            cursor += pitched.length;
-            if (note < config.noteCount - 1) cursor += gapLength;
+            // The PC script appends its generated Gap Sound after every note,
+            // including the final note.
+            totalLong += pitched.length;
+            totalLong += gapLength;
+            if (totalLong > Integer.MAX_VALUE) {
+                throw new IOException("A chromatic ficou grande demais para gerar no celular.");
+            }
 
             if (pitchedFolder != null) {
                 String name = String.format(Locale.US, "pitched_%02d_%s%d.wav",
@@ -172,14 +185,28 @@ public final class ChromaticGenerator {
             }
         }
 
-        progress(listener, 95, "Salvando WAV final…");
+        progress(listener, 92, "Concatenando as notas com os mesmos gaps do PC…");
+        float[] chromatic = new float[(int) totalLong];
+        int cursor = 0;
+        for (int note = 0; note < pitchedNotes.length; note++) {
+            float[] pitched = pitchedNotes[note];
+            noteOffsets[note] = cursor;
+            System.arraycopy(pitched, 0, chromatic, cursor, pitched.length);
+            cursor += pitched.length;
+            cursor += gapLength;
+        }
+
+        progress(listener, 96, "Salvando WAV final…");
         String outputName = sanitizeFileName(config.outputFileName);
         DocumentFile output = replaceFile(folder, outputName);
         WavIO.write(resolver, output.getUri(), chromatic, OUTPUT_SAMPLE_RATE);
-        progress(listener, 100, "Concluído com o motor original do desktop.");
+        progress(listener, 100, config.noteDurationMs == 0
+                ? "Concluído com duração natural e motor original do PC."
+                : "Concluído com motor original do PC e duração opcional separada.");
 
         return new Result(output.getUri(), sampleCount, config.noteCount,
-                chromatic.length / (double) OUTPUT_SAMPLE_RATE);
+                chromatic.length / (double) OUTPUT_SAMPLE_RATE,
+                noteOffsets, noteLengths);
     }
 
     private static DocumentFile replaceFile(DocumentFile folder, String fileName) throws IOException {
@@ -220,14 +247,18 @@ public final class ChromaticGenerator {
         if (config.noteCount < 1 || config.noteCount > 120) {
             throw new IllegalArgumentException("A quantidade de notas deve estar entre 1 e 120.");
         }
-        if (config.noteDurationMs < 40 || config.noteDurationMs > 10000) {
-            throw new IllegalArgumentException("A duração de cada nota deve ficar entre 40 e 10000 ms.");
+        if (config.noteDurationMs != 0
+                && (config.noteDurationMs < 40 || config.noteDurationMs > 10000)) {
+            throw new IllegalArgumentException("Use 0 para a duração original do PC ou 40–10000 ms.");
         }
         if (config.gapMs < 0 || config.gapMs > 10000) {
             throw new IllegalArgumentException("O gap deve ficar entre 0 e 10000 ms.");
         }
-        if (config.fadeMs < 0 || config.fadeMs > config.noteDurationMs / 2) {
-            throw new IllegalArgumentException("O fade deve ser menor que metade da duração da nota.");
+        if (config.fadeMs < 0 || config.fadeMs > 2000) {
+            throw new IllegalArgumentException("O fade deve ficar entre 0 e 2000 ms.");
+        }
+        if (config.noteDurationMs > 0 && config.fadeMs > config.noteDurationMs / 2) {
+            throw new IllegalArgumentException("O fade deve ser menor que metade da duração personalizada.");
         }
         if (config.dynamicHoldMs < 0 || config.dynamicHoldMs > 2000) {
             throw new IllegalArgumentException("O pitch original deve ficar entre 0 e 2000 ms.");
