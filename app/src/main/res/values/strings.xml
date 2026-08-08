@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Chromatic Scale Generator</string>
+    <string name="select_folder">Selecionar pasta de samples</string>
+    <string name="no_folder">Nenhuma pasta selecionada</string>
+    <string name="generate">Gerar chromatic.wav</string>
+    <string name="preview">Ouvir resultado</string>
+    <string name="stop_preview">Parar prévia</string>
+    <string name="create_dwp">Criar DirectWave (.dwp)</string>
+</resources>
