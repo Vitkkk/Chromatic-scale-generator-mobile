@@ -9,14 +9,11 @@ android {
 
     defaultConfig {
         applicationId = "com.vitkkk.chromatic"
-        minSdk = 26
+        minSdk = 21
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.10.1"
+        versionCode = 12
+        versionName = "0.10.2"
 
-        // Compatibility build: include both common ARM Android ABIs.
-        // This keeps the exact same Praat audio engine while allowing the APK
-        // to install on devices/ROMs that expose only 32-bit ARM userspace.
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -28,13 +25,31 @@ android {
         }
     }
 
+    signingConfigs {
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Legacy packaging is more compatible with older Samsung package
+            // installers: native libraries are compressed and extracted at install time.
+            useLegacyPackaging = true
         }
     }
 
