@@ -11,13 +11,14 @@ android {
         applicationId = "com.vitkkk.chromatic"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.10.0"
+        versionCode = 11
+        versionName = "0.10.1"
 
-        // The v0.10 exact-Praat validation APK targets the user's ARM64 phone.
-        // Restoring the other ABIs later does not change the audio engine.
+        // Compatibility build: include both common ARM Android ABIs.
+        // This keeps the exact same Praat audio engine while allowing the APK
+        // to install on devices/ROMs that expose only 32-bit ARM userspace.
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
 
         externalNativeBuild {
