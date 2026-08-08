@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.vitkkk.chromatic"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 35
         versionCode = 12
         versionName = "0.10.2"
@@ -47,8 +47,8 @@ android {
 
     packaging {
         jniLibs {
-            // Legacy packaging is more compatible with older Samsung package
-            // installers: native libraries are compressed and extracted at install time.
+            // Compress/extract native libraries using the older APK convention,
+            // which is friendlier to legacy Samsung package installers.
             useLegacyPackaging = true
         }
     }
