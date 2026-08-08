@@ -12,9 +12,13 @@ Port Android do **Chromatic Scale Generator** para criação de chromatics de FN
 6. Toque em **Gerar chromatic.wav**.
 7. Depois da geração, ouça o resultado ou toque em **Criar DirectWave (.dwp)**.
 
-## Motor de pitch — versão 0.10
+## Compatibilidade Android — versão 0.10.1
 
-A versão de PC usa `praat-parselmouth`. O aplicativo Android agora compila nativamente a mesma geração do motor usada pelo programa original: **Parselmouth 0.4.1 / Praat 6.1.38**.
+A build de compatibilidade inclui o mesmo motor Praat para `arm64-v8a` (ARM 64-bit) e `armeabi-v7a` (ARM 32-bit). A biblioteca `libchromatic_pitch.so` é o motor nativo do gerador e não deve ser removida do APK. O app requer Android 8.0 (API 26) ou superior.
+
+## Motor de pitch
+
+A versão de PC usa `praat-parselmouth`. O aplicativo Android compila nativamente a mesma geração do motor usada pelo programa original: **Parselmouth 0.4.1 / Praat 6.1.38**.
 
 O caminho estático reproduz o `chromatic_gen.py` original:
 
@@ -61,6 +65,7 @@ A opção **Ataque dinâmico: pitch original → nota** continua disponível com
 ## Recursos
 
 - Android 8.0+.
+- ARM 32-bit (`armeabi-v7a`) e ARM 64-bit (`arm64-v8a`).
 - Seleção de pasta pelo Storage Access Framework.
 - Detecção automática de `1.wav`, `2.wav`, `3.wav`…
 - WAV mono PCM 16-bit em 48 kHz.
